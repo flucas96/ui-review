@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ui-review": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "packages/ui-review/dist/cli.js",
+        "mcp",
+        "--root",
+        "."
+      ]
+    }
+  }
+}

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Static HTML fixture for UI Review" />
+    <title>Northstar — Static fixture</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='32' fill='%23151515'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='32' font-family='Arial' font-weight='700' fill='white'%3EN%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Northstar home">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <span>Northstar</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#work">Work</a>
+        <a href="#services">Services</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <button class="quiet-button" type="button" data-theme-toggle>Dark mode</button>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Independent digital studio</p>
+          <h1 id="hero-title">We make ambitious products feel inevitable.</h1>
+          <p class="hero-intro">
+            Strategy, identity, and digital experiences for teams building the next useful thing.
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#work">View selected work</a>
+            <a class="text-link" href="#contact">Start a conversation <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+        <div class="hero-art" aria-label="Abstract composition of project cards">
+          <article class="art-card art-card-main">
+            <span class="art-label">Latest release</span>
+            <strong>Field Notes 04</strong>
+            <span>Objects for slower mornings</span>
+          </article>
+          <div class="art-orbit" aria-hidden="true"></div>
+          <div class="art-chip" aria-hidden="true">New perspectives</div>
+        </div>
+      </section>
+
+      <section class="work-section" id="work" aria-labelledby="work-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Selected work</p>
+            <h2 id="work-title">Built to stay relevant.</h2>
+          </div>
+          <p>Three collaborations where clarity became the strongest design decision.</p>
+        </div>
+        <div class="project-grid">
+          <article class="project-card project-card-wide">
+            <div class="project-visual visual-coral"><span>Arco</span></div>
+            <div class="project-meta">
+              <div><h3>Arco House</h3><p>Hospitality · Identity · Digital</p></div>
+              <span>2026</span>
+            </div>
+          </article>
+          <article class="project-card">
+            <div class="project-visual visual-ink"><span>Onda</span></div>
+            <div class="project-meta">
+              <div><h3>Onda Systems</h3><p>Climate · Product · Platform</p></div>
+              <span>2025</span>
+            </div>
+          </article>
+          <article class="project-card">
+            <div class="project-visual visual-lime"><span>Common</span></div>
+            <div class="project-meta">
+              <div><h3>Common Ground</h3><p>Culture · Campaign · Editorial</p></div>
+              <span>2025</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="services-section" id="services" aria-labelledby="services-title">
+        <p class="eyebrow">What we do</p>
+        <h2 id="services-title">One senior team, from first question to final detail.</h2>
+        <div class="service-list">
+          <article><span>01</span><h3>Positioning</h3><p>Research, strategy, naming, and the story that aligns the work.</p></article>
+          <article><span>02</span><h3>Identity</h3><p>Distinct systems that remain coherent as companies grow and change.</p></article>
+          <article><span>03</span><h3>Digital</h3><p>Websites and products where structure, motion, and language work together.</p></article>
+        </div>
+      </section>
+
+      <section class="contact-section" id="contact" aria-labelledby="contact-title">
+        <p class="eyebrow">Have something in mind?</p>
+        <h2 id="contact-title">Let’s make it unmistakable.</h2>
+        <a class="contact-link" href="mailto:hello@example.com">hello@northstar.studio <span>↗</span></a>
+      </section>
+    </main>
+
+    <footer><span>Northstar Studio</span><span>Berlin · Working everywhere</span><span>© 2026</span></footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
