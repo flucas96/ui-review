@@ -10,7 +10,12 @@ const annotationStatusSchema = z.enum(annotationStatuses);
 export async function runMcpServer(projectRoot: string): Promise<void> {
   const store = new ReviewEventStore(projectRoot);
   await store.initialize();
-  const server = new McpServer({ name: "ui-review", version: "0.1.0" });
+  const server = new McpServer(
+    { name: "ui-review", version: "0.1.0" },
+    {
+      instructions: "Process visual annotations by reading their full thread and target context before editing. Move accepted work to in_progress, reply with the implemented change and verification, then set it to review. Only the human reviewer marks items resolved. Never delete annotations unless explicitly requested.",
+    },
+  );
 
   server.registerTool(
     "ui_review_list_annotations",

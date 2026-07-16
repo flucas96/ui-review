@@ -1,0 +1,10 @@
+interface:
+  display_name: "Review UI Feedback"
+  short_description: "Process visual comments with coding agents"
+  default_prompt: "Use $review-feedback to process the open UI Review annotations."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "ui-review"
+      description: "Local UI Review annotations and discussion threads"
+      transport: "stdio"

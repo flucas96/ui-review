@@ -15,6 +15,7 @@ It is designed for remote development over SSH: the proxy, feedback store, and c
 - Local append-only storage in `.ui-review/events.jsonl`
 - A generic MCP server plus a Claude Code `/review-feedback` skill
 - Multiple reviewed apps in one repository without comment collisions
+- React Router, hash routing, and separate feedback per application route
 
 ## Try the included fixtures
 
@@ -50,6 +51,8 @@ npx ui-review http://127.0.0.1:3000 --app product-ui
 ```
 
 UI Review forwards normal requests and development WebSockets, so Vite-style hot reload continues to work through the review URL.
+
+React applications can contain any number of pages. UI Review separates annotations by `pathname`, query string, and hash, and notices client-side route changes automatically. Comments on `/dashboard`, `/settings`, and `/users/42` therefore remain independent. Direct route reloads work whenever the underlying development server or static SPA fallback serves that route.
 
 For a built site or plain HTML file, pass a directory or file instead:
 
@@ -102,6 +105,21 @@ For another project, copy the skill and configure the MCP command to point to th
   }
 }
 ```
+
+## Connect Codex
+
+This repository includes the project MCP configuration at [.codex/config.toml](./.codex/config.toml) and the reusable skill at [.agents/skills/review-feedback/SKILL.md](./.agents/skills/review-feedback/SKILL.md).
+
+Build the package, open the repository as a trusted Codex project, and restart Codex once after cloning:
+
+```bash
+npm ci
+npm run build --workspace ui-review
+```
+
+In Codex, run `/mcp` and verify that `ui-review` is connected. Process feedback by mentioning `$review-feedback` or asking Codex to address the open UI Review comments. Codex can also select the skill automatically when the request clearly refers to visual annotations.
+
+The Codex app, CLI, and IDE extension share the project MCP configuration on the same host. Cloud tasks cannot read the local `.ui-review/events.jsonl`; use a local Codex task for the current MVP.
 
 ## Architecture
 

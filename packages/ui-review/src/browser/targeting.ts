@@ -25,9 +25,11 @@ const styleProperties = [
 
 const preferredAttributes = ["data-testid", "data-test", "data-cy"] as const;
 
+type PageLocation = Pick<Location, "hash" | "pathname" | "search">;
+
 /** Return a route-stable page identifier without the review proxy origin. */
-export function currentPageUrl(): string {
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+export function currentPageUrl(location: PageLocation = window.location): string {
+  return `${location.pathname}${location.search}${location.hash}`;
 }
 
 /** Capture the current viewport and document scroll state. */

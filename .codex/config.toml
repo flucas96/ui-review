@@ -1,0 +1,7 @@
+[mcp_servers.ui-review]
+command = "node"
+args = ["packages/ui-review/dist/cli.js", "mcp", "--root", "."]
+cwd = ".."
+required = true
+startup_timeout_sec = 10.0
+tool_timeout_sec = 60.0
