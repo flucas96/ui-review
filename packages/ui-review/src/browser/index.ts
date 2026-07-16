@@ -134,9 +134,10 @@ class ReviewOverlay {
     this.#elementButton.addEventListener("click", () => this.#setMode(this.#mode === "element" ? null : "element"));
     this.#regionButton.addEventListener("click", () => this.#setMode(this.#mode === "region" ? null : "region"));
     this.#commentsButton.addEventListener("click", () => {
-      this.#selectedId = null;
-      this.#panelOpen = !this.#panelOpen;
+      const panelOpen = !this.#panelOpen;
       this.#setMode(null);
+      this.#selectedId = null;
+      this.#panelOpen = panelOpen;
       this.#render();
     });
     this.#panelBack.addEventListener("click", () => {
@@ -404,10 +405,10 @@ class ReviewOverlay {
       number.textContent = String(index + 1);
       pin.append(number);
       pin.addEventListener("click", () => {
+        this.#setMode(null);
         this.#selectedId = annotation.id;
         this.#panelOpen = true;
         this.#expanded = true;
-        this.#setMode(null);
         this.#render();
       });
       return pin;
