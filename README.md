@@ -11,6 +11,7 @@ It is designed for remote development over SSH: the proxy, feedback store, and c
 - Element selection with selector, DOM path, text, accessibility, layout, and style context
 - Free-form rectangular area feedback
 - Threaded reviewer and agent replies with live updates
+- One-click Resolve/Reopen actions and bulk resolution from the comments overview; resolved items are archived behind Show resolved
 - `open`, `in_progress`, `review`, and `resolved` states
 - Local append-only storage in `.ui-review/events.jsonl`
 - A generic MCP server plus a Claude Code `/review-feedback` skill
@@ -52,7 +53,7 @@ npx ui-review http://127.0.0.1:3000 --app product-ui
 
 UI Review forwards normal requests and development WebSockets, so Vite-style hot reload continues to work through the review URL.
 
-React applications can contain any number of pages. UI Review separates annotations by `pathname`, query string, and hash, and notices client-side route changes automatically. Comments on `/dashboard`, `/settings`, and `/users/42` therefore remain independent. Direct route reloads work whenever the underlying development server or static SPA fallback serves that route.
+React applications can contain any number of pages. UI Review separates annotations by `pathname` and query string and notices client-side route changes automatically. Comments on `/dashboard`, `/settings`, and `/users/42` therefore remain independent. Hash routers are supported with `--include-hash`. Direct route reloads work whenever the underlying development server or static SPA fallback serves that route.
 
 For a built site or plain HTML file, pass a directory or file instead:
 
@@ -63,6 +64,8 @@ npx ui-review ./prototype.html --app prototype
 
 The `--app` value keeps annotations separate when several apps use the same route. If omitted, UI Review derives a stable identity from the target URL or absolute path.
 
+Ordinary document anchors such as `#pricing` stay attached to the current page by default. For applications that use the URL hash as an actual router, add `--include-hash` to keep each hash route independent.
+
 Useful options:
 
 ```text
@@ -70,6 +73,7 @@ Useful options:
 --host <address>  Bind address, default 127.0.0.1
 --root <path>     Project root for .ui-review data, default current directory
 --app <name>      Stable application identity
+--include-hash    Treat URL hash changes as separate routes
 ```
 
 Keep the default loopback host for SSH development. VS Code forwards the port through the authenticated SSH connection, so the review server does not need to be exposed publicly.
@@ -132,6 +136,8 @@ flowchart LR
 ```
 
 The reverse proxy keeps review code out of the target application and makes the browser client same-origin. All reviewer and agent text is rendered with DOM text nodes, never inserted as HTML.
+
+When an upstream development server sends a strict HTTP Content Security Policy, the proxy generates a per-response nonce for the injected module and isolated overlay styles and permits same-origin review API connections. CSP declared only through an HTML `<meta>` tag is not rewritten in the current release.
 
 ## Development
 

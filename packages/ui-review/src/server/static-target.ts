@@ -53,6 +53,7 @@ export async function serveStaticTarget(
   response: ServerResponse,
   target: StaticTarget,
   appId: string,
+  includeHash: boolean,
 ): Promise<void> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { allow: "GET, HEAD" });
@@ -79,7 +80,7 @@ export async function serveStaticTarget(
   const contentType = contentTypes[extension] ?? "application/octet-stream";
   const rawBody = await readFile(resolvedFile);
   const body = extension === ".html"
-    ? Buffer.from(injectReviewClient(rawBody.toString("utf8"), appId), "utf8")
+    ? Buffer.from(injectReviewClient(rawBody.toString("utf8"), { appId, includeHash }), "utf8")
     : rawBody;
 
   response.writeHead(200, {

@@ -7,6 +7,7 @@ describe("parseArguments", () => {
       "http://127.0.0.1:5173",
       "--app",
       "dashboard",
+      "--include-hash",
       "--port",
       "0",
       "--host",
@@ -15,6 +16,7 @@ describe("parseArguments", () => {
       appId: "dashboard",
       command: "serve",
       host: "localhost",
+      includeHash: true,
       port: 0,
       target: "http://127.0.0.1:5173",
     });

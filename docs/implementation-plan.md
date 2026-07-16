@@ -139,9 +139,11 @@ Compared with one mutable JSON document, an event log avoids lost updates when t
 
 - Accept an HTTP target such as `http://127.0.0.1:5173` or a local file/directory.
 - Derive a stable application identity from the target or accept an explicit `--app` name so equal routes in different apps never share feedback.
+- Ignore ordinary document fragments by default and accept `--include-hash` for hash-routed applications.
 - Reserve `/__ui_review/*` for the browser bundle, API, health endpoint, and event stream.
 - Forward request methods, bodies, response codes, headers, redirects, and non-HTML response streams.
 - Request identity-encoded upstream documents and inject a same-origin module before `</body>`.
+- Add a per-response nonce to strict HTTP Content Security Policy headers and the injected module.
 - Forward WebSocket upgrades unchanged so Vite and similar HMR systems continue working.
 - Serve directory indexes and SPA fallbacks in static mode.
 - Bind to loopback unless the user explicitly chooses another host.
@@ -155,6 +157,8 @@ Compared with one mutable JSON document, an event log avoids lost updates when t
 - Recalculate element pins on scrolling and resizing.
 - Use DOM text nodes for all user and agent content instead of HTML injection.
 - Stream external changes over server-sent events and refetch the current page annotations.
+- Observe History API, popstate, and hashchange navigation immediately so stale feedback never crosses routes.
+- Archive resolved items from pins and the active overview while keeping them recoverable through Show resolved.
 - Use a compact, polished visual system inspired by Linear and Raycast, with strong contrast, restrained motion, and responsive placement.
 
 ## MCP surface

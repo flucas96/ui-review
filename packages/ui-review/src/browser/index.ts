@@ -6,7 +6,7 @@ import {
   type RegionTarget,
 } from "../shared/types.js";
 import { ReviewApiClient } from "./api-client.js";
-import { captureElementTarget, captureViewport, currentPageUrl } from "./targeting.js";
+import { captureElementTarget, captureViewport, currentPageUrl, subscribeToPageChanges } from "./targeting.js";
 import { overlayStyles } from "./styles.js";
 
 type SelectionMode = "element" | "region" | null;
@@ -36,6 +36,7 @@ const statusLabels: Readonly<Record<AnnotationStatus, string>> = {
 class ReviewOverlay {
   readonly #api: ReviewApiClient;
   readonly #appId: string;
+  readonly #includeHash: boolean;
   readonly #host: HTMLDivElement;
   readonly #root: ShadowRoot;
   readonly #toolbar: HTMLDivElement;
@@ -45,6 +46,7 @@ class ReviewOverlay {
   readonly #count: HTMLSpanElement;
   readonly #panel: HTMLElement;
   readonly #panelBack: HTMLButtonElement;
+  readonly #panelClose: HTMLButtonElement;
   readonly #panelTitle: HTMLElement;
   readonly #panelSubtitle: HTMLElement;
   readonly #panelBody: HTMLDivElement;
@@ -63,23 +65,34 @@ class ReviewOverlay {
   readonly #composerSubmit: HTMLButtonElement;
   readonly #toast: HTMLDivElement;
   #annotations: readonly Annotation[] = [];
-  #currentPage = currentPageUrl();
+  #currentPage: string;
   #dragStart: Point | null = null;
   #expanded = false;
   #hoveredElement: Element | null = null;
   #mode: SelectionMode = null;
   #panelOpen = false;
+  #showResolved = false;
   #pendingTarget: AnnotationTarget | null = null;
   #refreshSequence = 0;
   #selectedId: string | null = null;
+  readonly #selectedIds = new Set<string>();
+  #returnFocus: HTMLElement | null = null;
+  #panelReturnAnnotationId: string | null = null;
+  #inertElements: Array<{
+    readonly element: HTMLElement;
+    readonly previousAriaHidden: string | null;
+    readonly wasInert: boolean;
+  }> = [];
   #toastTimer: number | undefined;
 
-  public constructor(host: HTMLDivElement, appId: string) {
+  public constructor(host: HTMLDivElement, appId: string, includeHash: boolean, nonce: string) {
     this.#api = new ReviewApiClient(appId);
     this.#appId = appId;
+    this.#includeHash = includeHash;
+    this.#currentPage = currentPageUrl(window.location, includeHash);
     this.#host = host;
     this.#root = host.attachShadow({ mode: "open" });
-    this.#root.innerHTML = markup();
+    this.#root.innerHTML = markup(nonce);
     this.#toolbar = required(this.#root, "[data-ur=toolbar]");
     this.#elementButton = required(this.#root, "[data-ur=element]");
     this.#regionButton = required(this.#root, "[data-ur=region]");
@@ -87,6 +100,7 @@ class ReviewOverlay {
     this.#count = required(this.#root, "[data-ur=count]");
     this.#panel = required(this.#root, "[data-ur=panel]");
     this.#panelBack = required(this.#root, "[data-ur=panel-back]");
+    this.#panelClose = required(this.#root, "[data-ur=panel-close]");
     this.#panelTitle = required(this.#root, "[data-ur=panel-title]");
     this.#panelSubtitle = required(this.#root, "[data-ur=panel-subtitle]");
     this.#panelBody = required(this.#root, "[data-ur=panel-body]");
@@ -112,15 +126,23 @@ class ReviewOverlay {
   public async start(): Promise<void> {
     await this.#refresh();
     this.#api.subscribe(() => void this.#refresh());
-    window.setInterval(() => {
-      const nextPage = currentPageUrl();
-      if (nextPage !== this.#currentPage) {
-        this.#currentPage = nextPage;
-        this.#selectedId = null;
-        void this.#refresh();
-      }
-    }, 500);
+    subscribeToPageChanges(this.#handlePageChange);
+    window.setInterval(this.#handlePageChange, 2_000);
   }
+
+  readonly #handlePageChange = (): void => {
+    const nextPage = currentPageUrl(window.location, this.#includeHash);
+    if (nextPage === this.#currentPage) {
+      return;
+    }
+    this.#currentPage = nextPage;
+    this.#selectedId = null;
+    this.#selectedIds.clear();
+    this.#showResolved = false;
+    this.#annotations = [];
+    this.#render();
+    void this.#refresh();
+  };
 
   #bindEvents(): void {
     required<HTMLButtonElement>(this.#root, "[data-ur=brand]").addEventListener("click", () => {
@@ -143,10 +165,12 @@ class ReviewOverlay {
     this.#panelBack.addEventListener("click", () => {
       this.#selectedId = null;
       this.#renderPanel();
+      window.requestAnimationFrame(() => this.#restorePanelFocus());
     });
-    required<HTMLButtonElement>(this.#root, "[data-ur=panel-close]").addEventListener("click", () => {
+    this.#panelClose.addEventListener("click", () => {
       this.#panelOpen = false;
       this.#render();
+      window.requestAnimationFrame(() => this.#commentsButton.focus());
     });
     required<HTMLButtonElement>(this.#root, "[data-ur=composer-cancel]").addEventListener("click", () => this.#closeComposer());
     this.#modal.addEventListener("pointerdown", (event) => {
@@ -195,12 +219,17 @@ class ReviewOverlay {
     }
     event.preventDefault();
     event.stopImmediatePropagation();
+    this.#returnFocus = element instanceof HTMLElement ? element : this.#elementButton;
     this.#pendingTarget = captureElementTarget(element);
     this.#setMode(null);
     this.#openComposer();
   };
 
   readonly #onDocumentKeyDown = (event: KeyboardEvent): void => {
+    if (!this.#modal.hidden && event.key === "Tab") {
+      this.#trapComposerFocus(event);
+      return;
+    }
     if (event.key !== "Escape") {
       return;
     }
@@ -211,6 +240,12 @@ class ReviewOverlay {
     if (this.#mode !== null) {
       this.#setMode(null);
       this.#showToast("Selection cancelled");
+      return;
+    }
+    if (this.#panelOpen) {
+      this.#panelOpen = false;
+      this.#render();
+      this.#commentsButton.focus();
     }
   };
 
@@ -256,6 +291,7 @@ class ReviewOverlay {
       type: "region",
       viewport: captureViewport(),
     };
+    this.#returnFocus = this.#regionButton;
     this.#pendingTarget = target;
     this.#setMode(null);
     this.#openComposer();
@@ -326,6 +362,7 @@ class ReviewOverlay {
     this.#composerTarget.textContent = targetLabel(this.#pendingTarget);
     this.#composerTextarea.value = "";
     this.#composerSubmit.disabled = true;
+    this.#makeTargetPageInert();
     this.#modal.hidden = false;
     window.requestAnimationFrame(() => this.#composerTextarea.focus());
   }
@@ -334,6 +371,61 @@ class ReviewOverlay {
     this.#pendingTarget = null;
     this.#modal.hidden = true;
     this.#composerTextarea.value = "";
+    this.#restoreTargetPage();
+    const returnFocus = this.#returnFocus;
+    this.#returnFocus = null;
+    window.requestAnimationFrame(() => returnFocus?.focus());
+  }
+
+  #makeTargetPageInert(): void {
+    this.#inertElements = [...document.body.children]
+      .filter((element): element is HTMLElement => element instanceof HTMLElement && element !== this.#host)
+      .map((element) => ({
+        element,
+        previousAriaHidden: element.getAttribute("aria-hidden"),
+        wasInert: element.inert,
+      }));
+    for (const { element } of this.#inertElements) {
+      element.inert = true;
+      element.setAttribute("aria-hidden", "true");
+    }
+    this.#toolbar.setAttribute("aria-hidden", "true");
+    this.#pinLayer.setAttribute("aria-hidden", "true");
+    this.#panel.setAttribute("aria-hidden", "true");
+  }
+
+  #restoreTargetPage(): void {
+    for (const { element, previousAriaHidden, wasInert } of this.#inertElements) {
+      element.inert = wasInert;
+      if (previousAriaHidden === null) {
+        element.removeAttribute("aria-hidden");
+      } else {
+        element.setAttribute("aria-hidden", previousAriaHidden);
+      }
+    }
+    this.#inertElements = [];
+    this.#toolbar.removeAttribute("aria-hidden");
+    this.#pinLayer.removeAttribute("aria-hidden");
+    this.#panel.removeAttribute("aria-hidden");
+  }
+
+  #trapComposerFocus(event: KeyboardEvent): void {
+    const focusable = [...this.#composerForm.querySelectorAll<HTMLElement>("button:not([disabled]), textarea:not([disabled])")];
+    if (focusable.length === 0) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (first === undefined || last === undefined) {
+      return;
+    }
+    if (event.shiftKey && this.#root.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && this.#root.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   async #submitAnnotation(): Promise<void> {
@@ -356,6 +448,7 @@ class ReviewOverlay {
       this.#panelOpen = true;
       this.#expanded = true;
       this.#render();
+      window.requestAnimationFrame(() => this.#panelBack.focus());
       this.#showToast("Comment added");
     } catch (error: unknown) {
       this.#composerSubmit.disabled = false;
@@ -371,6 +464,12 @@ class ReviewOverlay {
         return;
       }
       this.#annotations = annotations;
+      for (const annotationId of this.#selectedIds) {
+        const annotation = annotations.find((item) => item.id === annotationId);
+        if (annotation === undefined || annotation.status === "resolved") {
+          this.#selectedIds.delete(annotationId);
+        }
+      }
       if (this.#selectedId !== null && !annotations.some((annotation) => annotation.id === this.#selectedId)) {
         this.#selectedId = null;
       }
@@ -382,9 +481,14 @@ class ReviewOverlay {
 
   #render(): void {
     this.#toolbar.dataset.expanded = String(this.#expanded);
+    this.#toolbar.dataset.panelOpen = String(this.#panelOpen);
+    required<HTMLButtonElement>(this.#root, "[data-ur=brand]").setAttribute("aria-expanded", String(this.#expanded));
     this.#elementButton.dataset.active = String(this.#mode === "element");
+    this.#elementButton.setAttribute("aria-pressed", String(this.#mode === "element"));
     this.#regionButton.dataset.active = String(this.#mode === "region");
+    this.#regionButton.setAttribute("aria-pressed", String(this.#mode === "region"));
     this.#commentsButton.dataset.active = String(this.#panelOpen);
+    this.#commentsButton.setAttribute("aria-expanded", String(this.#panelOpen));
     const activeCount = this.#annotations.filter((annotation) => annotation.status !== "resolved").length;
     this.#count.textContent = String(activeCount);
     this.#count.hidden = activeCount === 0;
@@ -394,7 +498,7 @@ class ReviewOverlay {
   }
 
   #renderPins(): void {
-    const pins = this.#annotations.map((annotation, index) => {
+    const pins = this.#annotations.filter((annotation) => annotation.status !== "resolved").map((annotation, index) => {
       const pin = document.createElement("button");
       pin.className = "ur-pin";
       pin.dataset.annotationId = annotation.id;
@@ -406,10 +510,12 @@ class ReviewOverlay {
       pin.append(number);
       pin.addEventListener("click", () => {
         this.#setMode(null);
+        this.#panelReturnAnnotationId = annotation.id;
         this.#selectedId = annotation.id;
         this.#panelOpen = true;
         this.#expanded = true;
         this.#render();
+        window.requestAnimationFrame(() => this.#panelBack.focus());
       });
       return pin;
     });
@@ -462,37 +568,147 @@ class ReviewOverlay {
       return;
     }
 
+    const activeAnnotations = this.#annotations.filter((annotation) => annotation.status !== "resolved");
+    const resolvedAnnotations = this.#annotations.filter((annotation) => annotation.status === "resolved");
+    const visibleAnnotations = this.#showResolved ? this.#annotations : activeAnnotations;
+    const bulkBar = element("div", "ur-bulk-bar");
+    const selectLabel = element("label", "ur-select-all");
+    const selectAll = document.createElement("input");
+    selectAll.type = "checkbox";
+    selectAll.checked = activeAnnotations.length > 0 && activeAnnotations.every((annotation) => this.#selectedIds.has(annotation.id));
+    selectAll.indeterminate = !selectAll.checked && activeAnnotations.some((annotation) => this.#selectedIds.has(annotation.id));
+    selectAll.disabled = activeAnnotations.length === 0;
+    selectAll.addEventListener("change", () => {
+      for (const annotation of activeAnnotations) {
+        if (selectAll.checked) {
+          this.#selectedIds.add(annotation.id);
+        } else {
+          this.#selectedIds.delete(annotation.id);
+        }
+      }
+      this.#renderPanel();
+    });
+    selectLabel.append(selectAll, document.createTextNode("Select active"));
+    const resolveSelected = element("button", "ur-bulk-resolve", `Resolve selected (${this.#selectedIds.size})`) as HTMLButtonElement;
+    resolveSelected.type = "button";
+    resolveSelected.disabled = this.#selectedIds.size === 0;
+    resolveSelected.addEventListener("click", () => void this.#resolveAnnotations([...this.#selectedIds]));
+    bulkBar.append(selectLabel, resolveSelected);
+    if (resolvedAnnotations.length > 0) {
+      const showResolved = element(
+        "button",
+        "ur-show-resolved",
+        this.#showResolved ? "Hide resolved" : `Show resolved (${resolvedAnnotations.length})`,
+      ) as HTMLButtonElement;
+      showResolved.type = "button";
+      showResolved.addEventListener("click", () => {
+        this.#showResolved = !this.#showResolved;
+        this.#renderPanel();
+      });
+      bulkBar.append(showResolved);
+    }
+
     const list = element("div", "ur-list");
-    for (const [index, annotation] of this.#annotations.entries()) {
+    for (const [index, annotation] of visibleAnnotations.entries()) {
       list.append(this.#annotationCard(annotation, index));
     }
-    this.#panelBody.replaceChildren(list);
+    if (visibleAnnotations.length === 0) {
+      const empty = element("div", "ur-inline-empty");
+      empty.append(element("strong", "", "All comments resolved"));
+      empty.append(element("p", "", "Resolved feedback is archived from the active review."));
+      list.append(empty);
+    }
+    this.#panelBody.replaceChildren(bulkBar, list);
   }
 
-  #annotationCard(annotation: Annotation, index: number): HTMLButtonElement {
-    const card = element("button", "ur-card") as HTMLButtonElement;
-    card.type = "button";
+  #annotationCard(annotation: Annotation, index: number): HTMLElement {
+    const card = element("article", "ur-card");
     const top = element("div", "ur-card-top");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = this.#selectedIds.has(annotation.id);
+    checkbox.disabled = annotation.status === "resolved";
+    checkbox.setAttribute("aria-label", `Select annotation ${index + 1}`);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        this.#selectedIds.add(annotation.id);
+      } else {
+        this.#selectedIds.delete(annotation.id);
+      }
+      this.#renderPanel();
+    });
+    top.append(checkbox);
     top.append(element("span", "ur-card-index", String(index + 1)));
     top.append(element("code", "ur-target-label", targetLabel(annotation.target)));
     const status = element("span", "ur-status", statusLabels[annotation.status]);
     status.dataset.status = annotation.status;
     top.append(status);
+    const openButton = element("button", "ur-card-open") as HTMLButtonElement;
+    openButton.type = "button";
+    openButton.dataset.annotationOpen = annotation.id;
+    openButton.setAttribute("aria-label", `Open annotation ${index + 1}`);
     const firstMessage = annotation.messages[0];
-    card.append(top, element("p", "ur-card-message", firstMessage?.text ?? ""));
+    openButton.append(element("p", "ur-card-message", firstMessage?.text ?? ""));
     const meta = element("div", "ur-card-meta");
     meta.append(element("span", "", `${annotation.messages.length} ${annotation.messages.length === 1 ? "message" : "messages"}`));
     meta.append(element("time", "", formatTimestamp(annotation.updatedAt)));
-    card.append(meta);
-    card.addEventListener("click", () => {
+    openButton.append(meta);
+    openButton.addEventListener("click", () => {
+      this.#panelReturnAnnotationId = annotation.id;
       this.#selectedId = annotation.id;
       this.#renderPanel();
+      window.requestAnimationFrame(() => this.#panelBack.focus());
     });
+    const resolveButton = element(
+      "button",
+      annotation.status === "resolved" ? "ur-card-resolve is-resolved" : "ur-card-resolve",
+      annotation.status === "resolved" ? "Reopen" : "Resolve",
+    ) as HTMLButtonElement;
+    resolveButton.type = "button";
+    resolveButton.addEventListener("click", () => void this.#setAnnotationResolution(annotation));
+    card.append(top, openButton, resolveButton);
     return card;
   }
 
+  async #resolveAnnotations(annotationIds: readonly string[]): Promise<void> {
+    try {
+      await Promise.all(annotationIds.map((annotationId) => this.#api.setStatus(annotationId, "resolved")));
+      this.#selectedIds.clear();
+      await this.#refresh();
+      this.#showToast(`${annotationIds.length} ${annotationIds.length === 1 ? "annotation" : "annotations"} resolved`);
+    } catch (error: unknown) {
+      this.#showToast(errorMessage(error), "error");
+    }
+  }
+
+  async #setAnnotationResolution(annotation: Annotation): Promise<void> {
+    const nextStatus: AnnotationStatus = annotation.status === "resolved" ? "open" : "resolved";
+    try {
+      await this.#api.setStatus(annotation.id, nextStatus);
+      this.#selectedIds.delete(annotation.id);
+      await this.#refresh();
+      this.#showToast(nextStatus === "resolved" ? "Annotation resolved" : "Annotation reopened");
+    } catch (error: unknown) {
+      this.#showToast(errorMessage(error), "error");
+    }
+  }
+
+  #restorePanelFocus(): void {
+    if (this.#panelReturnAnnotationId !== null) {
+      const openButton = this.#root.querySelector<HTMLButtonElement>(`[data-annotation-open="${CSS.escape(this.#panelReturnAnnotationId)}"]`);
+      if (openButton !== null) {
+        openButton.focus();
+        return;
+      }
+    }
+    this.#commentsButton.focus();
+  }
+
   #renderAnnotationDetail(annotation: Annotation): void {
-    const index = this.#annotations.findIndex((item) => item.id === annotation.id);
+    const visibleAnnotations = this.#showResolved
+      ? this.#annotations
+      : this.#annotations.filter((item) => item.status !== "resolved" || item.id === annotation.id);
+    const index = visibleAnnotations.findIndex((item) => item.id === annotation.id);
     this.#panelBack.hidden = false;
     this.#panelTitle.textContent = `Annotation ${index + 1}`;
     this.#panelSubtitle.textContent = statusLabels[annotation.status];
@@ -516,11 +732,16 @@ class ReviewOverlay {
     const replyForm = element("form", "ur-reply-form") as HTMLFormElement;
     const textarea = element("textarea", "") as HTMLTextAreaElement;
     textarea.placeholder = "Reply in this thread…";
+    textarea.setAttribute("aria-label", "Reply in this thread");
     textarea.rows = 1;
     const sendButton = element("button", "ur-send-button") as HTMLButtonElement;
     sendButton.type = "submit";
+    sendButton.disabled = true;
     sendButton.setAttribute("aria-label", "Send reply");
     sendButton.innerHTML = icons.arrowUp;
+    textarea.addEventListener("input", () => {
+      sendButton.disabled = textarea.value.trim().length === 0;
+    });
     replyForm.append(textarea, sendButton);
     replyForm.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -557,6 +778,7 @@ class ReviewOverlay {
         .catch((error: unknown) => this.#showToast(errorMessage(error), "error"));
     });
     const statusSelect = element("select", "ur-status-select") as HTMLSelectElement;
+    statusSelect.setAttribute("aria-label", "Annotation status");
     for (const status of ["open", "in_progress", "review", "resolved"] as const) {
       const option = document.createElement("option");
       option.value = status;
@@ -581,7 +803,14 @@ class ReviewOverlay {
           statusSelect.disabled = false;
         });
     });
-    actions.append(deleteButton, statusSelect);
+    const resolveButton = element(
+      "button",
+      annotation.status === "resolved" ? "ur-resolve-button is-resolved" : "ur-resolve-button",
+      annotation.status === "resolved" ? "Reopen" : "Resolve",
+    ) as HTMLButtonElement;
+    resolveButton.type = "button";
+    resolveButton.addEventListener("click", () => void this.#setAnnotationResolution(annotation));
+    actions.append(deleteButton, resolveButton, statusSelect);
     this.#panelFooter.hidden = false;
     this.#panelFooter.replaceChildren(replyForm, actions);
   }
@@ -600,12 +829,13 @@ class ReviewOverlay {
   }
 }
 
-function markup(): string {
+function markup(nonce: string): string {
+  const nonceAttribute = nonce.length === 0 ? "" : ` nonce="${nonce}"`;
   return `
-    <style>${overlayStyles}</style>
+    <style${nonceAttribute}>${overlayStyles}</style>
     <div class="ur-pin-layer" data-ur="pins"></div>
     <div class="ur-highlight" data-ur="highlight" hidden><span class="ur-highlight-label" data-ur="highlight-label"></span></div>
-    <div class="ur-mode-banner" data-ur="mode-banner" hidden><strong data-ur="mode-text"></strong><span>Esc to cancel</span></div>
+    <div class="ur-mode-banner" data-ur="mode-banner" role="status" hidden><strong data-ur="mode-text"></strong><span>Esc to cancel</span></div>
     <div class="ur-region-capture" data-ur="region-capture" hidden><div class="ur-region-draft" data-ur="region-draft" hidden></div></div>
     <aside class="ur-panel" data-ur="panel" aria-label="UI Review comments" hidden>
       <header class="ur-panel-header">
@@ -617,20 +847,20 @@ function markup(): string {
       <footer class="ur-panel-footer" data-ur="panel-footer" hidden></footer>
     </aside>
     <div class="ur-modal-backdrop" data-ur="modal" hidden>
-      <form class="ur-composer" data-ur="composer-form">
-        <header class="ur-composer-head"><span class="ur-composer-icon">${icons.comments}</span><div><strong>Leave feedback</strong><span class="ur-composer-target" data-ur="composer-target"></span></div></header>
-        <div class="ur-composer-body"><textarea data-ur="composer-text" placeholder="What should change, and what result do you want?" maxlength="20000" required></textarea><p class="ur-composer-hint">The element, styles, position, and page context are attached automatically.</p></div>
+      <form class="ur-composer" data-ur="composer-form" role="dialog" aria-modal="true" aria-labelledby="ur-composer-title" aria-describedby="ur-composer-hint">
+        <header class="ur-composer-head"><span class="ur-composer-icon">${icons.comments}</span><div><strong id="ur-composer-title">Leave feedback</strong><span class="ur-composer-target" data-ur="composer-target"></span></div></header>
+        <div class="ur-composer-body"><textarea data-ur="composer-text" aria-label="Feedback comment" placeholder="What should change, and what result do you want?" maxlength="20000" required></textarea><p class="ur-composer-hint" id="ur-composer-hint">The element, styles, position, and page context are attached automatically.</p></div>
         <footer class="ur-composer-actions"><button class="ur-button ur-button-secondary" data-ur="composer-cancel" type="button">Cancel</button><button class="ur-button ur-button-primary" data-ur="composer-submit" type="submit" disabled>Add comment</button></footer>
       </form>
     </div>
-    <div class="ur-toast" data-ur="toast" hidden></div>
+    <div class="ur-toast" data-ur="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
     <div class="ur-toolbar" data-expanded="false" data-ur="toolbar" role="toolbar" aria-label="UI Review">
       <button class="ur-brand" data-ur="brand" type="button" aria-label="Toggle UI Review">${icons.spark}</button>
       <div class="ur-actions">
-        <button class="ur-tool-button" data-active="false" data-ur="element" type="button">${icons.cursor}<span class="ur-tool-label">Element</span></button>
-        <button class="ur-tool-button" data-active="false" data-ur="region" type="button">${icons.region}<span class="ur-tool-label">Area</span></button>
+        <button class="ur-tool-button" data-active="false" data-ur="element" type="button" aria-label="Select element">${icons.cursor}<span class="ur-tool-label">Element</span></button>
+        <button class="ur-tool-button" data-active="false" data-ur="region" type="button" aria-label="Draw area">${icons.region}<span class="ur-tool-label">Area</span></button>
         <span class="ur-divider"></span>
-        <button class="ur-tool-button" data-active="false" data-ur="comments" type="button">${icons.comments}<span class="ur-tool-label">Comments</span><span class="ur-count" data-ur="count" hidden></span></button>
+        <button class="ur-tool-button" data-active="false" data-ur="comments" type="button" aria-label="Review comments">${icons.comments}<span class="ur-tool-label">Comments</span><span class="ur-count" data-ur="count" hidden></span></button>
       </div>
     </div>
   `;
@@ -677,11 +907,14 @@ function targetPosition(target: AnnotationTarget): { readonly visible: boolean; 
     }
     if (element !== null) {
       const bounds = element.getBoundingClientRect();
-      x = bounds.left + Math.min(Math.max(bounds.width / 2, 14), 34);
-      y = bounds.top + 4;
+      const style = window.getComputedStyle(element);
+      if (bounds.width <= 0 || bounds.height <= 0 || style.display === "none" || style.visibility === "hidden") {
+        return { visible: false, x: 0, y: 0 };
+      }
+      x = bounds.right + 10;
+      y = bounds.top + 8;
     } else {
-      x = target.boundingBox.x - window.scrollX + 16;
-      y = target.boundingBox.y - window.scrollY + 4;
+      return { visible: false, x: 0, y: 0 };
     }
   } else {
     x = target.boundingBox.x - window.scrollX + target.boundingBox.width / 2;
@@ -708,9 +941,11 @@ if (!document.querySelector("[data-ui-review-root]")) {
   if (appId === undefined || appId.length === 0) {
     throw new Error("UI Review app identity is missing from the injected browser script");
   }
+  const includeHash = reviewScript?.dataset.uiReviewIncludeHash === "true";
+  const nonce = reviewScript?.nonce ?? "";
   const host = document.createElement("div");
   host.dataset.uiReviewRoot = "";
   document.body.append(host);
-  const overlay = new ReviewOverlay(host, appId);
+  const overlay = new ReviewOverlay(host, appId, includeHash, nonce);
   void overlay.start();
 }

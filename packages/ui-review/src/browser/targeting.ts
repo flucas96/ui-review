@@ -28,8 +28,33 @@ const preferredAttributes = ["data-testid", "data-test", "data-cy"] as const;
 type PageLocation = Pick<Location, "hash" | "pathname" | "search">;
 
 /** Return a route-stable page identifier without the review proxy origin. */
-export function currentPageUrl(location: PageLocation = window.location): string {
-  return `${location.pathname}${location.search}${location.hash}`;
+export function currentPageUrl(location: PageLocation = window.location, includeHash = false): string {
+  return `${location.pathname}${location.search}${includeHash ? location.hash : ""}`;
+}
+
+/** Notify immediately when a client-side router changes the current URL. */
+export function subscribeToPageChanges(onChange: () => void): () => void {
+  const originalPushState = window.history.pushState.bind(window.history);
+  const originalReplaceState = window.history.replaceState.bind(window.history);
+  const notify = (): void => onChange();
+
+  window.history.pushState = (...arguments_: Parameters<History["pushState"]>): void => {
+    originalPushState(...arguments_);
+    notify();
+  };
+  window.history.replaceState = (...arguments_: Parameters<History["replaceState"]>): void => {
+    originalReplaceState(...arguments_);
+    notify();
+  };
+  window.addEventListener("hashchange", notify);
+  window.addEventListener("popstate", notify);
+
+  return () => {
+    window.history.pushState = originalPushState;
+    window.history.replaceState = originalReplaceState;
+    window.removeEventListener("hashchange", notify);
+    window.removeEventListener("popstate", notify);
+  };
 }
 
 /** Capture the current viewport and document scroll state. */

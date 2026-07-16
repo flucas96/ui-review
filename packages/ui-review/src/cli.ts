@@ -9,6 +9,7 @@ type ServeArguments = {
   readonly appId?: string;
   readonly command: "serve";
   readonly host: string;
+  readonly includeHash: boolean;
   readonly port: number;
   readonly projectRoot: string;
   readonly target: string;
@@ -25,7 +26,7 @@ const usage = `
 UI Review — local visual feedback for coding agents
 
 Usage:
-  ui-review <url-or-path> [--app <name>] [--port 4317] [--host 127.0.0.1] [--root <path>]
+  ui-review <url-or-path> [--app <name>] [--include-hash] [--port 4317] [--host 127.0.0.1] [--root <path>]
   ui-review mcp [--root <path>]
 
 Examples:
@@ -54,6 +55,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   const runningServer = await startReviewServer({
     ...(parsed.appId === undefined ? {} : { appId: parsed.appId }),
     host: parsed.host,
+    includeHash: parsed.includeHash,
     port: parsed.port,
     projectRoot: parsed.projectRoot,
     target: parsed.target,
@@ -81,6 +83,7 @@ export function parseArguments(argv: readonly string[]): CliArguments {
   }
 
   let host = "127.0.0.1";
+  let includeHash = false;
   let port = 4317;
   let projectRoot = process.cwd();
   let appId: string | undefined;
@@ -89,6 +92,10 @@ export function parseArguments(argv: readonly string[]): CliArguments {
   for (let index = 0; index < values.length; index += 1) {
     const argument = values[index];
     if (argument === undefined) {
+      continue;
+    }
+    if (argument === "--include-hash") {
+      includeHash = true;
       continue;
     }
     if (argument === "--app" || argument === "--host" || argument === "--port" || argument === "--root") {
@@ -136,6 +143,7 @@ export function parseArguments(argv: readonly string[]): CliArguments {
     ...(appId === undefined ? {} : { appId }),
     command: "serve",
     host,
+    includeHash,
     port,
     projectRoot,
     target,

@@ -12,6 +12,7 @@ import { UpstreamProxy } from "./upstream-proxy.js";
 export type ReviewServerOptions = {
   readonly appId?: string;
   readonly host?: string;
+  readonly includeHash?: boolean;
   readonly port?: number;
   readonly projectRoot: string;
   readonly target: string;
@@ -24,7 +25,7 @@ export type RunningReviewServer = {
 };
 
 type ResolvedTarget =
-  | { readonly appId: string; readonly kind: "static"; readonly target: StaticTarget }
+  | { readonly appId: string; readonly includeHash: boolean; readonly kind: "static"; readonly target: StaticTarget }
   | { readonly kind: "upstream"; readonly proxy: UpstreamProxy };
 
 /** Start the local review proxy, annotation API, and event stream. */
@@ -36,7 +37,8 @@ export async function startReviewServer(options: ReviewServerOptions): Promise<R
   await store.initialize();
   const api = new ReviewApi(store, browserBundle);
   const appId = options.appId ?? defaultAppId(options.target);
-  const target = await resolveTarget(options.target, appId);
+  const includeHash = options.includeHash ?? false;
+  const target = await resolveTarget(options.target, appId, includeHash);
 
   const server = createServer((request, response) => {
     void handleRequest(request, response, api, target);
@@ -95,7 +97,7 @@ async function handleRequest(
       await target.proxy.handle(request, response);
       return;
     }
-    await serveStaticTarget(request, response, target.target, target.appId);
+    await serveStaticTarget(request, response, target.target, target.appId, target.includeHash);
   } catch (error: unknown) {
     if (response.headersSent) {
       response.end();
@@ -107,11 +109,11 @@ async function handleRequest(
   }
 }
 
-async function resolveTarget(target: string, appId: string): Promise<ResolvedTarget> {
+async function resolveTarget(target: string, appId: string, includeHash: boolean): Promise<ResolvedTarget> {
   if (target.startsWith("http://") || target.startsWith("https://")) {
-    return { kind: "upstream", proxy: new UpstreamProxy(new URL(target), appId) };
+    return { kind: "upstream", proxy: new UpstreamProxy(new URL(target), appId, includeHash) };
   }
-  return { appId, kind: "static", target: await resolveStaticTarget(target) };
+  return { appId, includeHash, kind: "static", target: await resolveStaticTarget(target) };
 }
 
 function defaultAppId(target: string): string {

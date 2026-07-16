@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { randomBytes } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -15,11 +16,13 @@ const excludedResponseHeaders = new Set(["connection", "content-length", "set-co
 /** HTTP and WebSocket proxy that injects the review client into HTML responses. */
 export class UpstreamProxy {
   readonly #appId: string;
+  readonly #includeHash: boolean;
   readonly #target: URL;
   readonly #webSocketProxy = HttpProxy.createProxyServer({ changeOrigin: true, ws: true });
 
-  public constructor(target: URL, appId: string) {
+  public constructor(target: URL, appId: string, includeHash: boolean) {
     this.#appId = appId;
+    this.#includeHash = includeHash;
     this.#target = target;
     this.#webSocketProxy.on("error", (_error, _request, socket) => {
       if ("destroy" in socket && typeof socket.destroy === "function") {
@@ -55,7 +58,8 @@ export class UpstreamProxy {
 
     const contentType = upstreamResponse.headers.get("content-type") ?? "";
     const isHtml = contentType.toLowerCase().includes("text/html");
-    copyResponseHeaders(upstreamResponse, response, this.#target, isHtml);
+    const nonce = isHtml ? randomBytes(18).toString("base64") : undefined;
+    copyResponseHeaders(upstreamResponse, response, this.#target, isHtml, nonce);
     response.statusCode = upstreamResponse.status;
     response.statusMessage = upstreamResponse.statusText;
 
@@ -65,7 +69,11 @@ export class UpstreamProxy {
     }
 
     if (isHtml) {
-      const body = injectReviewClient(await upstreamResponse.text(), this.#appId);
+      const body = injectReviewClient(await upstreamResponse.text(), {
+        appId: this.#appId,
+        includeHash: this.#includeHash,
+        ...(nonce === undefined ? {} : { nonce }),
+      });
       response.setHeader("content-length", Buffer.byteLength(body));
       response.end(body);
       return;
@@ -103,12 +111,23 @@ function copyResponseHeaders(
   response: ServerResponse,
   target: URL,
   isHtml: boolean,
+  nonce: string | undefined,
 ): void {
   upstreamResponse.headers.forEach((value, name) => {
-    if (!excludedResponseHeaders.has(name.toLowerCase())) {
+    const normalizedName = name.toLowerCase();
+    if (!excludedResponseHeaders.has(normalizedName) && !(nonce !== undefined && isCspHeader(normalizedName))) {
       response.setHeader(name, value);
     }
   });
+
+  if (nonce !== undefined) {
+    for (const headerName of ["content-security-policy", "content-security-policy-report-only"] as const) {
+      const policy = upstreamResponse.headers.get(headerName);
+      if (policy !== null) {
+        response.setHeader(headerName, addReviewNonce(policy, nonce));
+      }
+    }
+  }
 
   const cookies = upstreamResponse.headers.getSetCookie();
   if (cookies.length > 0) {
@@ -127,4 +146,45 @@ function copyResponseHeaders(
       response.setHeader("content-length", contentLength);
     }
   }
+}
+
+function isCspHeader(name: string): boolean {
+  return name === "content-security-policy" || name === "content-security-policy-report-only";
+}
+
+/** Add the injected review script and style nonce to an HTTP CSP policy. */
+export function addReviewNonce(policy: string, nonce: string): string {
+  const nonceSource = `'nonce-${nonce}'`;
+  const directives = policy.split(";").map((directive) => directive.trim()).filter((directive) => directive.length > 0);
+  const nonceDirectives = new Set(["script-src", "script-src-elem", "style-src", "style-src-elem"]);
+  let foundConnectDirective = false;
+  let foundScriptDirective = false;
+  let foundStyleDirective = false;
+  const augmented = directives.map((directive) => {
+    const [name] = directive.split(/\s+/, 1);
+    const normalizedName = name?.toLowerCase();
+    if (normalizedName === "connect-src") {
+      foundConnectDirective = true;
+      return directive.includes("'self'") ? directive : `${directive} 'self'`;
+    }
+    if (normalizedName === undefined || !nonceDirectives.has(normalizedName)) {
+      return directive;
+    }
+    if (normalizedName.startsWith("script-")) {
+      foundScriptDirective = true;
+    } else {
+      foundStyleDirective = true;
+    }
+    return directive.includes(nonceSource) ? directive : `${directive} ${nonceSource}`;
+  });
+  if (!foundScriptDirective) {
+    augmented.push(`script-src 'self' ${nonceSource}`);
+  }
+  if (!foundStyleDirective) {
+    augmented.push(`style-src 'self' ${nonceSource}`);
+  }
+  if (!foundConnectDirective) {
+    augmented.push("connect-src 'self'");
+  }
+  return augmented.join("; ");
 }
