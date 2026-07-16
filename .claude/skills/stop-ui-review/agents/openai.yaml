@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stop UI Review"
+  short_description: "Stop the active UI Review session safely"
+  default_prompt: "Use $stop-ui-review to stop this project’s UI Review session."

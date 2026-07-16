@@ -99,7 +99,9 @@ packages/
   ui-review/          Public CLI, proxy, overlay, storage, API, and MCP server
 .claude/
   skills/
+    start-ui-review/   Safe local launch workflow
     review-feedback/  Agent workflow
+    stop-ui-review/    Managed process cleanup
 ```
 
 A single publishable `ui-review` package keeps installation and versioning simple. Source folders inside the package separate browser, server, MCP, and shared protocol code without creating unnecessary workspace packages.
@@ -115,7 +117,7 @@ VS Code integrated browser
           ↕ annotation REST API and SSE
 Append-only local event store
           ↕ typed MCP tools
-Claude Code and /review-feedback
+Claude Code lifecycle and feedback skills
 ```
 
 The proxy listens on `127.0.0.1` by default. VS Code Remote SSH exposes it through the existing authenticated connection. No public listener or cloud service is required.
@@ -173,10 +175,12 @@ The initial server exposes:
 
 `/review-feedback` instructs Claude to inspect open feedback, acknowledge each item through status, make scoped code changes, reply when clarification is required, verify the application, and move completed items to `review`. Claude must not mark an item `resolved`; that decision belongs to the reviewer.
 
+`/start-ui-review` detects static HTML or a framework development server, starts the loopback-only review session, and records owned processes. `/stop-ui-review` terminates only those managed processes and preserves the event log. A personal installer synchronizes all three skills, installs a packed CLI, and configures a user-scoped Claude MCP server that resolves each active project through `CLAUDE_PROJECT_DIR`.
+
 ## Verification strategy
 
 - Strict TypeScript checking across fixtures and product code.
-- Unit tests for event folding, selector generation helpers, HTML injection, and API validation.
+- Unit tests for event folding, selector generation helpers, HTML injection, API validation, and personal skill installation.
 - Production builds for both fixtures and the publishable package.
 - Browser walkthrough against both HTTP targets.
 - Element annotation, region annotation, reply, status, persistence, reload, and deletion flows.
@@ -200,7 +204,7 @@ Implement the isolated overlay, selection modes, pins, composer, thread panel, a
 
 ### Agent bridge
 
-Implement MCP tools, project configuration, and the Claude Code skill.
+Implement MCP tools, project and user-scoped configuration, Claude Code lifecycle and feedback skills, and their installer.
 
 ### Product review
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Start UI Review"
+  short_description: "Start an app with visual review enabled"
+  default_prompt: "Use $start-ui-review to launch this project behind UI Review."

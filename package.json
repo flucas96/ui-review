@@ -12,7 +12,8 @@
     "check": "npm run check --workspaces --if-present",
     "dev:html": "npm run dev --workspace @ui-review/html-fixture",
     "dev:react": "npm run dev --workspace @ui-review/react-fixture",
-    "test": "npm run test --workspaces --if-present"
+    "install:claude": "node scripts/install-claude-code.mjs",
+    "test": "node --test scripts/*.test.mjs && npm run test --workspaces --if-present"
   },
   "engines": {
     "node": ">=20.0.0"

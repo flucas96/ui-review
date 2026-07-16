@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runMcpServer } from "./mcp/server.js";
@@ -85,7 +86,7 @@ export function parseArguments(argv: readonly string[]): CliArguments {
   let host = "127.0.0.1";
   let includeHash = false;
   let port = 4317;
-  let projectRoot = process.cwd();
+  let projectRoot = defaultProjectRoot();
   let appId: string | undefined;
   const positionals: string[] = [];
 
@@ -150,8 +151,27 @@ export function parseArguments(argv: readonly string[]): CliArguments {
   };
 }
 
-const invokedAsEntry = process.argv[1] !== undefined
-  && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+/** Resolve the project root supplied by Claude Code or the current shell. */
+export function defaultProjectRoot(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  currentDirectory = process.cwd(),
+): string {
+  return resolve(environment.CLAUDE_PROJECT_DIR ?? currentDirectory);
+}
+
+/** Check whether Node invoked this module directly, including through an npm bin symlink. */
+export function isEntryPoint(candidate: string | undefined, modulePath = fileURLToPath(import.meta.url)): boolean {
+  if (candidate === undefined) {
+    return false;
+  }
+  try {
+    return realpathSync(candidate) === realpathSync(modulePath);
+  } catch {
+    return false;
+  }
+}
+
+const invokedAsEntry = isEntryPoint(process.argv[1]);
 
 if (invokedAsEntry) {
   void main().catch((error: unknown) => {
