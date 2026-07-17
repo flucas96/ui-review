@@ -14,8 +14,8 @@ The same review layer works with React applications and responsive layouts.
 
 <table>
   <tr>
-    <td width="70%"><img src="./docs/images/react-review-desktop.png" alt="UI Review on a React application at desktop size"></td>
-    <td width="30%"><img src="./docs/images/react-review-mobile.png" alt="UI Review toolbar on a React application at mobile size"></td>
+    <td width="70%"><img src="./docs/images/react-review-desktop.jpg" alt="UI Review on a React application at desktop size"></td>
+    <td width="30%"><img src="./docs/images/react-review-mobile.jpg" alt="UI Review toolbar on a React application at mobile size"></td>
   </tr>
   <tr>
     <td align="center"><sub>React desktop</sub></td>

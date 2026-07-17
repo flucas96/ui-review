@@ -49,9 +49,13 @@ export const overlayStyles = `
   }
 
   .ur-toolbar[data-expanded="false"] {
-    border-radius: 50%;
+    backdrop-filter: none;
+    background: transparent;
+    border: 0;
+    border-radius: 16px;
+    box-shadow: none;
     left: auto;
-    padding: 5px;
+    padding: 0;
     right: 22px;
     transform: none;
   }
@@ -59,7 +63,7 @@ export const overlayStyles = `
   .ur-brand {
     align-items: center;
     background: linear-gradient(145deg, #8b7dff, #6552ee);
-    border: 0;
+    border: 1px solid rgba(255, 255, 255, 0.34);
     border-radius: 11px;
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.25), 0 4px 12px rgba(105, 84, 238, 0.35);
     color: #fff;
@@ -68,8 +72,19 @@ export const overlayStyles = `
     height: 40px;
     justify-content: center;
     padding: 0;
+    transition: box-shadow 150ms ease, transform 150ms ease;
     width: 40px;
   }
+
+  .ur-toolbar[data-expanded="false"] .ur-brand {
+    border-radius: 15px;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.32), 0 12px 30px rgba(74, 57, 190, 0.28), 0 3px 8px rgba(20, 20, 28, 0.14);
+    height: 48px;
+    width: 48px;
+  }
+
+  .ur-toolbar[data-expanded="false"] .ur-brand:hover { box-shadow: inset 0 1px rgba(255, 255, 255, 0.36), 0 14px 34px rgba(74, 57, 190, 0.34), 0 4px 10px rgba(20, 20, 28, 0.16); transform: translateY(-1px); }
+  .ur-toolbar[data-expanded="false"] .ur-brand:active { transform: translateY(0) scale(0.98); }
 
   .ur-brand svg { height: 21px; width: 21px; }
   .ur-actions { align-items: center; display: flex; gap: 3px; }
@@ -317,6 +332,6 @@ export const overlayStyles = `
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ur-card, .ur-pin, .ur-toolbar, .ur-highlight { transition: none; }
+    .ur-brand, .ur-card, .ur-pin, .ur-toolbar, .ur-highlight { transition: none; }
   }
 `;
