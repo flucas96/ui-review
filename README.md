@@ -4,6 +4,25 @@ UI Review adds a polished visual feedback layer to any local web app without cha
 
 It is designed for remote development over SSH: the proxy, feedback store, and coding agent all run on the Linux host, while the interface opens through VS Code's integrated Chromium browser. No Edge extension is required.
 
+## Demo
+
+Select an element or draw an area, leave a comment, and manage the resulting review threads without modifying the app being reviewed.
+
+![UI Review comment overview on a plain HTML site](./docs/images/html-review-comments.jpg)
+
+The same review layer works with React applications and responsive layouts.
+
+<table>
+  <tr>
+    <td width="70%"><img src="./docs/images/react-review-desktop.png" alt="UI Review on a React application at desktop size"></td>
+    <td width="30%"><img src="./docs/images/react-review-mobile.png" alt="UI Review toolbar on a React application at mobile size"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>React desktop</sub></td>
+    <td align="center"><sub>Responsive mobile</sub></td>
+  </tr>
+</table>
+
 ## What works
 
 - React, Vite, and other development servers through an HTTP and WebSocket proxy
