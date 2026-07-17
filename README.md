@@ -14,7 +14,7 @@ It is designed for remote development over SSH: the proxy, feedback store, and c
 - One-click Resolve/Reopen actions and bulk resolution from the comments overview; resolved items are archived behind Show resolved
 - `open`, `in_progress`, `review`, and `resolved` states
 - Local append-only storage in `.ui-review/events.jsonl`
-- A generic MCP server plus a Claude Code `/review-feedback` skill
+- A generic MCP server plus Claude Code skills for starting, processing, and stopping reviews
 - Multiple reviewed apps in one repository without comment collisions
 - React Router, hash routing, and separate feedback per application route
 
@@ -78,15 +78,95 @@ Useful options:
 
 Keep the default loopback host for SSH development. VS Code forwards the port through the authenticated SSH connection, so the review server does not need to be exposed publicly.
 
-## Connect Claude Code
+## Set up UI Review in Claude Code
 
-This repository includes [.mcp.json](./.mcp.json) and project skills for [starting UI Review](./.claude/skills/start-ui-review/SKILL.md), [processing feedback](./.claude/skills/review-feedback/SKILL.md), and [stopping the session](./.claude/skills/stop-ui-review/SKILL.md). After building the package, approve the project MCP server when Claude Code prompts for trust, then invoke:
+This section assumes Claude Code is already available and covers only the UI Review skill and MCP integration. Run these commands on the same machine where Claude Code and the reviewed project run. With VS Code Remote SSH, that is normally the remote Linux host.
+
+Requirements: Node.js 20 or newer, npm, Git, and an existing Claude Code installation.
+
+### Personal setup for all projects
+
+Clone UI Review and run its installer:
+
+```bash
+git clone https://github.com/flucas96/ui-review.git
+cd ui-review
+npm ci
+npm run install:claude
+```
+
+The installer:
+
+- Packs and installs the `ui-review` CLI globally without depending on the cloned directory afterward.
+- Synchronizes `start-ui-review`, `review-feedback`, and `stop-ui-review` to `~/.claude/skills/`.
+- Adds a user-scoped `ui-review` MCP server that automatically uses Claude Code's active project directory.
+
+It updates only UI Review's personal skills and MCP entry. It does not install or reconfigure Claude Code itself.
+
+### Verify the setup
+
+Check the CLI and MCP connection:
+
+```bash
+ui-review --version
+claude mcp get ui-review
+```
+
+The first command should print `0.1.0`. The MCP result should show:
+
+```text
+Scope: User config (available in all your projects)
+Status: ✓ Connected
+Command: ui-review
+Args: mcp
+```
+
+The following personal skill files should now exist:
+
+```text
+~/.claude/skills/start-ui-review/SKILL.md
+~/.claude/skills/review-feedback/SKILL.md
+~/.claude/skills/stop-ui-review/SKILL.md
+```
+
+If the personal skills directory was created for the first time, restart the current Claude Code session once so the new slash commands appear.
+
+### Run the first review
+
+Open the project you want to review and start Claude Code there:
+
+```bash
+cd /path/to/your/project
+claude
+```
+
+Then use this workflow inside Claude Code:
+
+```text
+/start-ui-review
+```
+
+Claude detects plain HTML or the existing framework command, starts the app when necessary, launches the loopback-only review proxy, and returns the review URL. Open that URL in the VS Code integrated browser and add annotations.
+
+Ask Claude to implement the open feedback:
 
 ```text
 /review-feedback
 ```
 
-The MCP server gives any compatible coding agent five typed tools:
+Claude reads annotations through MCP, moves accepted work to **In progress**, implements and verifies the changes, replies in each thread, and moves completed items to **Ready for review**. Only the human reviewer marks an annotation **Resolved**.
+
+When the review session is finished, stop only its managed processes:
+
+```text
+/stop-ui-review
+```
+
+The stop skill preserves `.ui-review/events.jsonl` and leaves development servers running when it did not start them.
+
+### Verify MCP tools when feedback cannot be loaded
+
+The MCP server exposes these five tools:
 
 - `ui_review_list_annotations`
 - `ui_review_get_annotation`
@@ -94,30 +174,25 @@ The MCP server gives any compatible coding agent five typed tools:
 - `ui_review_reply`
 - `ui_review_delete_annotation`
 
-The skill tells Claude to acknowledge an item, make a scoped change, verify it, reply in the thread, and move it to **Ready for review**. Only the human reviewer marks it **Resolved**.
+If Claude reports that the MCP server is connected but cannot discover these tools:
 
-### Install the complete personal workflow
+- Stop the current `/review-feedback` attempt.
+- Open `/mcp`, select `ui-review`, and choose **Reconnect**.
+- Run `/review-feedback` again. If discovery still fails, restart Claude Code in the project once.
 
-Install the CLI, synchronize the three skills to `~/.claude/skills`, and configure a user-scoped MCP server with one command:
+`ListMcpResources` returning `No resources found` is expected because UI Review exposes MCP tools, not MCP resources. Do not use direct edits to `.ui-review/events.jsonl` as a fallback; replies and lifecycle changes should go through the MCP tools.
+
+### Installer maintenance and options
+
+Run the installer again after pulling a newer UI Review version:
 
 ```bash
+git pull
 npm ci
 npm run install:claude
 ```
 
-The installer packs the current `ui-review` package before installing it globally, so the command does not depend on this repository remaining in the same location. Claude Code supplies its current project through `CLAUDE_PROJECT_DIR`, allowing the user-scoped MCP server to read the correct local annotation store in every project.
-
-The resulting workflow is:
-
-```text
-/start-ui-review   Detect and launch HTML or a framework app behind UI Review
-/review-feedback   Implement open annotations and reply in their threads
-/stop-ui-review    Stop only the processes managed for the review session
-```
-
-The start skill keeps review code out of the target application, binds to loopback, reuses healthy development servers, and records managed session metadata under `.ui-review/`. The stop skill preserves annotations and never terminates a development server that it did not start.
-
-Useful installer options:
+Available options:
 
 ```text
 --dry-run         Show planned changes
@@ -126,9 +201,7 @@ Useful installer options:
 --skip-mcp        Leave Claude Code's user MCP configuration unchanged
 ```
 
-Claude Code detects edits to an existing personal skills directory immediately. Restart it only when `~/.claude/skills` was created for the first time.
-
-For a team-shared project setup without the personal installer, copy the desired skills into that project's `.claude/skills/` directory and commit this `.mcp.json` equivalent:
+For a team-shared project setup instead of a personal installation, make sure `ui-review` is available on each contributor's `PATH`, then commit the desired directories from `.claude/skills/` and this `.mcp.json` equivalent:
 
 ```json
 {
