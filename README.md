@@ -117,8 +117,9 @@ npm run install:claude
 The installer:
 
 - Packs and installs the `ui-review` CLI globally without depending on the cloned directory afterward.
-- Synchronizes `start-ui-review`, `review-feedback`, and `stop-ui-review` to `~/.claude/skills/`.
+- Synchronizes `start-ui-review`, `review-feedback`, `stop-ui-review`, and `update-ui-review` to `~/.claude/skills/`.
 - Adds a user-scoped `ui-review` MCP server that automatically uses Claude Code's active project directory.
+- Records the checkout path and installer choices in `~/.ui-review/installation.json` so later updates use the same setup.
 
 It updates only UI Review's personal skills and MCP entry. It does not install or reconfigure Claude Code itself.
 
@@ -131,7 +132,7 @@ ui-review --version
 claude mcp get ui-review
 ```
 
-The first command should print `0.1.0`. The MCP result should show:
+The first command should print `0.2.0`. The MCP result should show:
 
 ```text
 Scope: User config (available in all your projects)
@@ -146,6 +147,7 @@ The following personal skill files should now exist:
 ~/.claude/skills/start-ui-review/SKILL.md
 ~/.claude/skills/review-feedback/SKILL.md
 ~/.claude/skills/stop-ui-review/SKILL.md
+~/.claude/skills/update-ui-review/SKILL.md
 ```
 
 If the personal skills directory was created for the first time, restart the current Claude Code session once so the new slash commands appear.
@@ -201,17 +203,36 @@ If Claude reports that the MCP server is connected but cannot discover these too
 
 `ListMcpResources` returning `No resources found` is expected because UI Review exposes MCP tools, not MCP resources. Do not use direct edits to `.ui-review/events.jsonl` as a fallback; replies and lifecycle changes should go through the MCP tools.
 
-### Installer maintenance and options
+### Update UI Review
 
-Run the installer again after pulling a newer UI Review version:
+For a normal personal installation, invoke the update directly inside Claude Code:
 
-```bash
-git pull
-npm ci
-npm run install:claude
+```text
+/update-ui-review
 ```
 
-Available options:
+The skill reads the recorded checkout path and runs the complete update there. The equivalent terminal command, run inside the UI Review checkout, is:
+
+```bash
+npm run update:claude
+```
+
+The updater performs a fast-forward-only Git pull, reinstalls locked dependencies, rebuilds and globally installs the CLI, refreshes all four skills, and recreates the user-scoped MCP entry. It preserves custom installer choices such as `--target`, `--skip-cli`, and `--skip-mcp`.
+
+The updater never resets, stashes, or overwrites local repository changes. If the checkout has conflicting edits or a divergent branch, it stops and asks you to preserve those changes explicitly. Project feedback under `.ui-review/` is not part of the tool checkout and is never touched.
+
+After a successful update, restart any running Claude Code session. This reloads both the updated skill instructions and the new MCP tool schema. Then verify:
+
+```bash
+ui-review --version
+claude mcp get ui-review
+```
+
+If only the MCP server needs refreshing, open `/mcp`, choose `ui-review`, and reconnect it. A full Claude Code restart is still recommended after skill updates.
+
+### Installer options
+
+The initial installer accepts these options:
 
 ```text
 --dry-run         Show planned changes
@@ -260,6 +281,18 @@ flowchart LR
 ```
 
 The reverse proxy keeps review code out of the target application and makes the browser client same-origin. All reviewer and agent text is rendered with DOM text nodes, never inserted as HTML.
+
+### Agent data and event-log size
+
+`.ui-review/events.jsonl` is the local append-only history. It contains complete target metadata plus status and message events so discussions remain recoverable, but the MCP server does not send that whole file to an agent.
+
+Agent reads are deliberately progressive:
+
+- `ui_review_list_annotations` returns compact summaries: ID, status, route, short initial comment, message count, and a minimal target reference.
+- `ui_review_get_annotation` returns full DOM or region context only for the one annotation the agent is about to process. Persistence-only message IDs and timestamps are omitted.
+- Status changes, replies, and deletions return small acknowledgements instead of repeating the annotation.
+
+This keeps the durable history intact while preventing a review with many annotations from consuming the agent context all at once. Agents should filter the list to `open` and `in_progress`, then load selected items individually.
 
 When an upstream development server sends a strict HTTP Content Security Policy, the proxy generates a per-response nonce for the injected module and isolated overlay styles and permits same-origin review API connections. CSP declared only through an HTML `<meta>` tag is not rewritten in the current release.
 

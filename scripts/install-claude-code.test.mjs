@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { installSkills, parseInstallerArguments } from "./install-claude-code.mjs";
+import { installSkills, parseInstallerArguments, writeInstallationState } from "./install-claude-code.mjs";
 
 test("parses safe installer options", () => {
   const options = parseInstallerArguments(["--target", "./temporary-skills", "--skip-cli", "--skip-mcp", "--dry-run"]);
@@ -21,10 +21,35 @@ test("copies every Claude Code skill", async () => {
     const startSkill = await readFile(join(target, "start-ui-review", "SKILL.md"), "utf8");
     const stopSkill = await readFile(join(target, "stop-ui-review", "SKILL.md"), "utf8");
     const feedbackSkill = await readFile(join(target, "review-feedback", "SKILL.md"), "utf8");
+    const updateSkill = await readFile(join(target, "update-ui-review", "SKILL.md"), "utf8");
 
     assert.match(startSkill, /name: start-ui-review/);
     assert.match(stopSkill, /name: stop-ui-review/);
     assert.match(feedbackSkill, /name: review-feedback/);
+    assert.match(updateSkill, /name: update-ui-review/);
+  } finally {
+    await rm(target, { force: true, recursive: true });
+  }
+});
+
+test("records the source checkout for future updates", async () => {
+  const target = await mkdtemp(join(tmpdir(), "ui-review-state-"));
+  try {
+    const statePath = join(target, "installation.json");
+    await writeInstallationState(statePath, "/srv/ui-review", {
+      configureMcp: false,
+      installCli: true,
+      target: "/srv/claude-skills",
+    });
+
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    assert.deepEqual(state, {
+      configureMcp: false,
+      installCli: true,
+      schemaVersion: 1,
+      skillTarget: "/srv/claude-skills",
+      sourceRoot: "/srv/ui-review",
+    });
   } finally {
     await rm(target, { force: true, recursive: true });
   }

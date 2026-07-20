@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runMcpServer } from "./mcp/server.js";
 import { startReviewServer } from "./server/review-server.js";
+import { uiReviewVersion } from "./shared/version.js";
 
 type ServeArguments = {
   readonly appId?: string;
@@ -43,7 +44,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     return;
   }
   if (argv.includes("--version") || argv.includes("-v")) {
-    process.stdout.write("0.1.0\n");
+    process.stdout.write(`${uiReviewVersion}\n`);
     return;
   }
 

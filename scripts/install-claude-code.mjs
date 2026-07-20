@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const skillNames = ["review-feedback", "start-ui-review", "stop-ui-review"];
+const installationStatePath = join(homedir(), ".ui-review", "installation.json");
+const skillNames = ["review-feedback", "start-ui-review", "stop-ui-review", "update-ui-review"];
 
 /** Parse installer flags into a stable configuration. */
 export function parseInstallerArguments(argv) {
@@ -55,6 +56,22 @@ export async function installSkills(target, sourceRoot = repositoryRoot) {
   }
 }
 
+/** Record the source checkout used for future UI Review updates. */
+export async function writeInstallationState(
+  target = installationStatePath,
+  sourceRoot = repositoryRoot,
+  options = { configureMcp: true, installCli: true, target: join(homedir(), ".claude", "skills") },
+) {
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, `${JSON.stringify({
+    configureMcp: options.configureMcp,
+    installCli: options.installCli,
+    schemaVersion: 1,
+    skillTarget: options.target,
+    sourceRoot,
+  }, null, 2)}\n`, "utf8");
+}
+
 function run(command, args, allowFailure = false) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
@@ -91,6 +108,7 @@ async function main() {
     process.stdout.write(`Would synchronize: ${skillNames.join(", ")}\n`);
     process.stdout.write(`Would install CLI: ${String(options.installCli)}\n`);
     process.stdout.write(`Would configure MCP: ${String(options.configureMcp)}\n`);
+    process.stdout.write(`Would record update source: ${installationStatePath}\n`);
     return;
   }
 
@@ -125,6 +143,8 @@ async function main() {
     }
   }
 
+  await writeInstallationState(installationStatePath, repositoryRoot, options);
+  process.stdout.write(`Recorded the update source in ${installationStatePath}.\n`);
   process.stdout.write("Restart Claude Code only if the personal skills directory was created for the first time.\n");
 }
 

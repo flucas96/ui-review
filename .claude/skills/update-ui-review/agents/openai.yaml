@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update UI Review"
+  short_description: "Refresh UI Review and its agent integration"
+  default_prompt: "Use $update-ui-review to safely update UI Review."

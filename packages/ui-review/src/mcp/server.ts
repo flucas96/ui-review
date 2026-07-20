@@ -2,7 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { annotationStatuses } from "../shared/types.js";
+import { uiReviewVersion } from "../shared/version.js";
 import { ReviewEventStore } from "../server/event-store.js";
+import { presentAnnotation, summarizeAnnotation } from "./presentation.js";
 
 const annotationStatusSchema = z.enum(annotationStatuses);
 
@@ -11,7 +13,7 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
   const store = new ReviewEventStore(projectRoot);
   await store.initialize();
   const server = new McpServer(
-    { name: "ui-review", version: "0.1.0" },
+    { name: "ui-review", version: uiReviewVersion },
     {
       instructions: "Process visual annotations by reading their full thread and target context before editing. Move accepted work to in_progress, reply with the implemented change and verification, then set it to review. Only the human reviewer marks items resolved. Never delete annotations unless explicitly requested.",
     },
@@ -21,7 +23,7 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
     "ui_review_list_annotations",
     {
       annotations: { openWorldHint: false, readOnlyHint: true },
-      description: "List visual UI annotations with their DOM or region context and full discussion threads.",
+      description: "List compact visual annotation summaries. Call ui_review_get_annotation for full target context and discussion before editing.",
       inputSchema: {
         appId: z.string().optional().describe("Optional application identity to filter by"),
         pageUrl: z.string().optional().describe("Optional exact page path to filter by"),
@@ -35,7 +37,8 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
         ...(pageUrl === undefined ? {} : { pageUrl }),
         ...(status === undefined ? {} : { status }),
       };
-      return toolResult({ annotations: await store.list(query) });
+      const annotations = await store.list(query);
+      return toolResult({ annotations: annotations.map(summarizeAnnotation) });
     },
   );
 
@@ -47,7 +50,7 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       inputSchema: { annotationId: z.string().min(1) },
       title: "Get UI review annotation",
     },
-    async ({ annotationId }) => toolResult({ annotation: await store.get(annotationId) }),
+    async ({ annotationId }) => toolResult({ annotation: presentAnnotation(await store.get(annotationId)) }),
   );
 
   server.registerTool(
@@ -61,7 +64,10 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       },
       title: "Update UI review status",
     },
-    async ({ annotationId, status }) => toolResult({ annotation: await store.setStatus(annotationId, status) }),
+    async ({ annotationId, status }) => {
+      const annotation = await store.setStatus(annotationId, status);
+      return toolResult({ annotationId: annotation.id, status: annotation.status });
+    },
   );
 
   server.registerTool(
@@ -75,9 +81,10 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       },
       title: "Reply to UI review annotation",
     },
-    async ({ annotationId, message }) => toolResult({
-      annotation: await store.addMessage(annotationId, "agent", message),
-    }),
+    async ({ annotationId, message }) => {
+      const annotation = await store.addMessage(annotationId, "agent", message);
+      return toolResult({ annotationId: annotation.id, replied: true, status: annotation.status });
+    },
   );
 
   server.registerTool(
@@ -99,6 +106,6 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
 
 function toolResult(value: unknown) {
   return {
-    content: [{ text: JSON.stringify(value, null, 2), type: "text" as const }],
+    content: [{ text: JSON.stringify(value), type: "text" as const }],
   };
 }

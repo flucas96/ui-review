@@ -175,7 +175,7 @@ The initial server exposes:
 
 `/review-feedback` instructs Claude to inspect open feedback, acknowledge each item through status, make scoped code changes, reply when clarification is required, verify the application, and move completed items to `review`. Claude must not mark an item `resolved`; that decision belongs to the reviewer.
 
-`/start-ui-review` detects static HTML or a framework development server, starts the loopback-only review session, and records owned processes. `/stop-ui-review` terminates only those managed processes and preserves the event log. A personal installer synchronizes all three skills, installs a packed CLI, and configures a user-scoped Claude MCP server that resolves each active project through `CLAUDE_PROJECT_DIR`.
+`/start-ui-review` detects static HTML or a framework development server, starts the loopback-only review session, and records owned processes. `/stop-ui-review` terminates only those managed processes and preserves the event log. A personal installer synchronizes the start, feedback, stop, and update skills, installs a packed CLI, and configures a user-scoped Claude MCP server that resolves each active project through `CLAUDE_PROJECT_DIR`. `/update-ui-review` uses the recorded source checkout to fast-forward and reinstall every component without discarding local changes.
 
 ## Verification strategy
 

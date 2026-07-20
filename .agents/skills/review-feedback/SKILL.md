@@ -9,8 +9,8 @@ Use the `ui-review` MCP tools to process annotations captured in the browser.
 
 ## Workflow
 
-1. Call `ui_review_list_annotations` for `open` and `in_progress` items. If the user names an annotation, load it with `ui_review_get_annotation` first.
-2. Read the complete thread and target metadata before editing. Use its app identity, route, selector, DOM path, nearby text, accessibility context, computed styles, and bounds to locate the implementation.
+1. Call `ui_review_list_annotations` for `open` and `in_progress` items. The list is intentionally compact. If the user names an annotation, load it with `ui_review_get_annotation` first.
+2. Load every annotation selected for work with `ui_review_get_annotation` and read the complete thread and target metadata before editing. Use its app identity, route, selector, DOM path, nearby text, accessibility context, computed styles, and bounds to locate the implementation.
 3. Set an accepted item to `in_progress` before changing code.
 4. If the outcome is materially ambiguous or conflicts with another requirement, reply with one concise question and keep the item `open`.
 5. Make the smallest cohesive change that satisfies the feedback and preserves unrelated behavior.
