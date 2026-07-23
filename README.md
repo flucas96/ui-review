@@ -8,6 +8,10 @@ It is designed for remote development over SSH: the proxy, feedback store, and c
 
 Select an element or draw an area, leave a comment, and manage the resulting review threads without modifying the app being reviewed.
 
+[![Watch the UI Review end-to-end demo](./docs/images/ui-review-demo-poster.jpg)](./docs/demo/ui-review-demo.mp4)
+
+**[Watch the 55-second end-to-end demo](./docs/demo/ui-review-demo.mp4)** — from launching a review and pinning feedback to the agent implementation, threaded reply, and final approval.
+
 ![UI Review comment overview on a plain HTML site](./docs/images/html-review-comments.jpg)
 
 The same review layer works with React applications and responsive layouts.
