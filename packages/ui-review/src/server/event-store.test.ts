@@ -46,6 +46,22 @@ describe("ReviewEventStore", () => {
     await expect(store.get(annotation.id)).rejects.toBeInstanceOf(AnnotationNotFoundError);
     await expect(store.list()).resolves.toEqual([]);
   });
+
+  it("serializes concurrent writes from separate store instances", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ui-review-concurrent-"));
+    temporaryDirectories.push(directory);
+    const firstStore = new ReviewEventStore(directory);
+    const secondStore = new ReviewEventStore(directory);
+    await Promise.all([firstStore.initialize(), secondStore.initialize()]);
+
+    await Promise.all(Array.from({ length: 40 }, async (_, index) => {
+      const store = index % 2 === 0 ? firstStore : secondStore;
+      await store.create(annotationInput("dashboard", `/item/${String(index)}`, `Comment ${String(index)}`));
+    }));
+
+    await expect(firstStore.list()).resolves.toHaveLength(40);
+    expect((await readFile(firstStore.filePath, "utf8")).trim().split("\n")).toHaveLength(40);
+  });
 });
 
 async function createStore(): Promise<ReviewEventStore> {

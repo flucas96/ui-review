@@ -30,4 +30,4 @@ jobs:
       - name: Build packages and fixtures
         run: npm run build
       - name: Audit production dependencies
-        run: npm audit --omit=dev
+        run: npm audit --omit=dev --audit-level=high

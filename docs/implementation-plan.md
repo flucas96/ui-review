@@ -4,7 +4,7 @@
 
 Build a local-first visual review layer for static HTML and framework-based web applications. A reviewer opens the proxied application in the VS Code integrated browser, targets DOM elements or free-form regions, and discusses each annotation with a coding agent. The reviewed application remains unchanged.
 
-The initial release is a development tool for one reviewer and one locally running Claude Code session. Its data model and transport must leave room for multiple reviewers later.
+The tool targets one local reviewer and supports multiple coordinated Claude Code or Codex sessions. Its data model and transport leave room for multiple human reviewers later.
 
 ## Evaluated approaches
 
@@ -102,6 +102,7 @@ packages/
     start-ui-review/   Safe local launch workflow
     review-feedback/  Agent workflow
     stop-ui-review/    Managed process cleanup
+    update-ui-review/  Safe installation update workflow
 ```
 
 A single publishable `ui-review` package keeps installation and versioning simple. Source folders inside the package separate browser, server, MCP, and shared protocol code without creating unnecessary workspace packages.
@@ -133,7 +134,7 @@ An annotation contains:
 
 Statuses are `open`, `in_progress`, `review`, and `resolved`.
 
-State is stored as append-only JSON Lines events under `.ui-review/events.jsonl`. Creation, message, status, and deletion events are folded into the current view.
+State is stored as append-only JSON Lines events under `.ui-review/events.jsonl`. Creation, message, status, and deletion events are folded into the current view. Cross-process file locking serializes reads and appends. Short-lived claim files provide atomic per-annotation leases without changing the durable event format.
 
 Compared with one mutable JSON document, an event log avoids lost updates when the proxy and MCP server append concurrently. Compared with SQLite, it avoids a native dependency and remains easy to inspect, copy, and version during the MVP. A database adapter can replace it later without changing the API.
 
@@ -165,22 +166,24 @@ Compared with one mutable JSON document, an event log avoids lost updates when t
 
 ## MCP surface
 
-The initial server exposes:
+The server exposes:
 
 - `ui_review_list_annotations`
 - `ui_review_get_annotation`
+- `ui_review_claim_annotation`
+- `ui_review_release_annotation`
 - `ui_review_set_status`
 - `ui_review_reply`
 - `ui_review_delete_annotation`
 
-`/review-feedback` instructs Claude to inspect open feedback, acknowledge each item through status, make scoped code changes, reply when clarification is required, verify the application, and move completed items to `review`. Claude must not mark an item `resolved`; that decision belongs to the reviewer.
+`/review-feedback` instructs Claude to inspect open feedback, atomically claim selected items, make scoped code changes, reply when clarification is required, verify the application, move completed items to `review`, and release their leases. Claude must not mark an item `resolved`; that decision belongs to the reviewer.
 
-`/start-ui-review` detects static HTML or a framework development server, starts the loopback-only review session, and records owned processes. `/stop-ui-review` terminates only those managed processes and preserves the event log. A personal installer synchronizes the start, feedback, stop, and update skills, installs a packed CLI, and configures a user-scoped Claude MCP server that resolves each active project through `CLAUDE_PROJECT_DIR`. `/update-ui-review` uses the recorded source checkout to fast-forward and reinstall every component without discarding local changes.
+`/start-ui-review` detects static HTML or a framework development server, allocates an operating-system-selected port, and records owned processes under a unique review session ID. `/stop-ui-review` terminates only the explicitly selected session and preserves every other session plus the event log. A personal installer synchronizes the start, feedback, stop, and update skills, installs a packed CLI, and configures a user-scoped Claude MCP server that resolves each active project through `CLAUDE_PROJECT_DIR`. `/update-ui-review` uses the recorded source checkout to fast-forward and reinstall every component without discarding local changes.
 
 ## Verification strategy
 
 - Strict TypeScript checking across fixtures and product code.
-- Unit tests for event folding, selector generation helpers, HTML injection, API validation, and personal skill installation.
+- Unit tests for event folding, concurrent event writes, atomic annotation claims, selector generation helpers, HTML injection, API validation, and personal skill installation.
 - Production builds for both fixtures and the publishable package.
 - Browser walkthrough against both HTTP targets.
 - Element annotation, region annotation, reply, status, persistence, reload, and deletion flows.

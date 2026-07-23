@@ -11,6 +11,7 @@ import type {
   ThreadMessage,
 } from "../shared/types.js";
 import { reviewEventSchema } from "./validation.js";
+import { withFileMutex } from "./file-mutex.js";
 
 type AnnotationQuery = {
   readonly appId?: string;
@@ -32,10 +33,12 @@ export class AnnotationNotFoundError extends Error {
 export class ReviewEventStore {
   public readonly filePath: string;
   readonly #listeners = new Set<StoreListener>();
+  readonly #lockPath: string;
   #watching = false;
 
   public constructor(projectRoot: string) {
     this.filePath = resolve(projectRoot, ".ui-review", "events.jsonl");
+    this.#lockPath = resolve(projectRoot, ".ui-review", "events.lock");
   }
 
   /** Ensure the data directory and event log exist. */
@@ -160,11 +163,17 @@ export class ReviewEventStore {
   };
 
   async #append(event: ReviewEvent): Promise<void> {
-    await appendFile(this.filePath, `${JSON.stringify(event)}\n`, { encoding: "utf8" });
+    await withFileMutex(this.#lockPath, async () => {
+      await appendFile(this.filePath, `${JSON.stringify(event)}\n`, { encoding: "utf8" });
+    });
     this.#notify();
   }
 
   async #fold(): Promise<Map<string, Annotation>> {
+    return withFileMutex(this.#lockPath, async () => this.#foldUnlocked());
+  }
+
+  async #foldUnlocked(): Promise<Map<string, Annotation>> {
     const contents = await readFile(this.filePath, "utf8");
     const annotations = new Map<string, Annotation>();
     const lines = contents.split("\n").filter((line) => line.trim().length > 0);

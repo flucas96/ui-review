@@ -4,18 +4,22 @@ import * as z from "zod/v4";
 import { annotationStatuses } from "../shared/types.js";
 import { uiReviewVersion } from "../shared/version.js";
 import { ReviewEventStore } from "../server/event-store.js";
-import { presentAnnotation, summarizeAnnotation } from "./presentation.js";
+import { agentSessionId } from "./agent-session.js";
+import { AnnotationClaimStore } from "./annotation-claims.js";
+import { presentAnnotation, presentClaim, summarizeAnnotation } from "./presentation.js";
 
 const annotationStatusSchema = z.enum(annotationStatuses);
 
 /** Run the stdio MCP bridge for a project's persisted review feedback. */
 export async function runMcpServer(projectRoot: string): Promise<void> {
   const store = new ReviewEventStore(projectRoot);
-  await store.initialize();
+  const claimStore = new AnnotationClaimStore(projectRoot);
+  const agentId = agentSessionId(projectRoot);
+  await Promise.all([store.initialize(), claimStore.initialize()]);
   const server = new McpServer(
     { name: "ui-review", version: uiReviewVersion },
     {
-      instructions: "Process visual annotations by reading their full thread and target context before editing. Move accepted work to in_progress, reply with the implemented change and verification, then set it to review. Only the human reviewer marks items resolved. Never delete annotations unless explicitly requested.",
+      instructions: "Claim each visual annotation before editing or mutating it. Read its full thread and target context, move accepted work to in_progress, renew the claim before final updates, reply with the implementation and verification, set it to review, then release the claim. Skip annotations claimed by another session. Only the human reviewer marks items resolved. Never delete annotations unless explicitly requested.",
     },
   );
 
@@ -38,7 +42,11 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
         ...(status === undefined ? {} : { status }),
       };
       const annotations = await store.list(query);
-      return toolResult({ annotations: annotations.map(summarizeAnnotation) });
+      const summaries = await Promise.all(annotations.map(async (annotation) => summarizeAnnotation(
+        annotation,
+        presentClaim(await claimStore.get(annotation.id), agentId),
+      )));
+      return toolResult({ annotations: summaries });
     },
   );
 
@@ -50,14 +58,54 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       inputSchema: { annotationId: z.string().min(1) },
       title: "Get UI review annotation",
     },
-    async ({ annotationId }) => toolResult({ annotation: presentAnnotation(await store.get(annotationId)) }),
+    async ({ annotationId }) => toolResult({
+      annotation: presentAnnotation(
+        await store.get(annotationId),
+        presentClaim(await claimStore.get(annotationId), agentId),
+      ),
+    }),
+  );
+
+  server.registerTool(
+    "ui_review_claim_annotation",
+    {
+      annotations: { idempotentHint: true, openWorldHint: false, readOnlyHint: false },
+      description: "Atomically claim an annotation for this agent session or renew its existing lease. Fails while another session owns a live claim.",
+      inputSchema: {
+        annotationId: z.string().min(1),
+        leaseMinutes: z.number().int().min(5).max(120).default(30),
+      },
+      title: "Claim UI review annotation",
+    },
+    async ({ annotationId, leaseMinutes }) => {
+      await store.get(annotationId);
+      const claim = await claimStore.claim(annotationId, agentId, leaseMinutes * 60_000);
+      return toolResult({
+        annotationId,
+        claim: presentClaim(claim, agentId),
+      });
+    },
+  );
+
+  server.registerTool(
+    "ui_review_release_annotation",
+    {
+      annotations: { idempotentHint: true, openWorldHint: false, readOnlyHint: false },
+      description: "Release this agent session's annotation claim after handoff or when work is abandoned.",
+      inputSchema: { annotationId: z.string().min(1) },
+      title: "Release UI review annotation",
+    },
+    async ({ annotationId }) => toolResult({
+      annotationId,
+      released: await claimStore.release(annotationId, agentId),
+    }),
   );
 
   server.registerTool(
     "ui_review_set_status",
     {
       annotations: { idempotentHint: true, openWorldHint: false, readOnlyHint: false },
-      description: "Set an annotation to open, in progress, ready for review, or resolved.",
+      description: "Set a claimed annotation to open, in progress, ready for review, or resolved.",
       inputSchema: {
         annotationId: z.string().min(1),
         status: annotationStatusSchema,
@@ -65,7 +113,11 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       title: "Update UI review status",
     },
     async ({ annotationId, status }) => {
-      const annotation = await store.setStatus(annotationId, status);
+      const annotation = await claimStore.runAsOwner(
+        annotationId,
+        agentId,
+        async () => store.setStatus(annotationId, status),
+      );
       return toolResult({ annotationId: annotation.id, status: annotation.status });
     },
   );
@@ -74,7 +126,7 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
     "ui_review_reply",
     {
       annotations: { openWorldHint: false, readOnlyHint: false },
-      description: "Reply as the coding agent inside a visual annotation thread.",
+      description: "Reply as the coding agent inside a claimed visual annotation thread.",
       inputSchema: {
         annotationId: z.string().min(1),
         message: z.string().trim().min(1).max(20_000),
@@ -82,7 +134,11 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       title: "Reply to UI review annotation",
     },
     async ({ annotationId, message }) => {
-      const annotation = await store.addMessage(annotationId, "agent", message);
+      const annotation = await claimStore.runAsOwner(
+        annotationId,
+        agentId,
+        async () => store.addMessage(annotationId, "agent", message),
+      );
       return toolResult({ annotationId: annotation.id, replied: true, status: annotation.status });
     },
   );
@@ -91,12 +147,13 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
     "ui_review_delete_annotation",
     {
       annotations: { destructiveHint: true, openWorldHint: false, readOnlyHint: false },
-      description: "Delete a visual annotation from the current review view while retaining its append-only history.",
+      description: "Delete a claimed visual annotation from the current review view while retaining its append-only history.",
       inputSchema: { annotationId: z.string().min(1) },
       title: "Delete UI review annotation",
     },
     async ({ annotationId }) => {
-      await store.delete(annotationId);
+      await claimStore.runAsOwner(annotationId, agentId, async () => store.delete(annotationId));
+      await claimStore.release(annotationId, agentId);
       return toolResult({ deleted: annotationId });
     },
   );

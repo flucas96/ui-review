@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Annotation } from "../shared/types.js";
-import { presentAnnotation, summarizeAnnotation } from "./presentation.js";
+import { presentAnnotation, presentClaim, summarizeAnnotation } from "./presentation.js";
 
 const annotation: Annotation = {
   appId: "react-fixture",
@@ -69,5 +69,23 @@ describe("agent-facing annotation presentation", () => {
     ]);
     expect(detail).not.toHaveProperty("createdAt");
     expect(detail).not.toHaveProperty("updatedAt");
+  });
+
+  it("shows claim ownership without exposing the raw agent session identifier", () => {
+    const claim = {
+      agentId: "agent-private-id",
+      annotationId: annotation.id,
+      claimedAt: "2026-07-20T10:00:00.000Z",
+      expiresAt: "2026-07-20T10:30:00.000Z",
+    };
+
+    expect(presentClaim(claim, "agent-private-id")).toEqual({
+      expiresAt: claim.expiresAt,
+      owner: "this_session",
+    });
+    expect(presentClaim(claim, "other-agent")).toEqual({
+      expiresAt: claim.expiresAt,
+      owner: "another_session",
+    });
   });
 });

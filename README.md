@@ -34,6 +34,7 @@ The same review layer works with React applications and responsive layouts.
 - `open`, `in_progress`, `review`, and `resolved` states
 - Local append-only storage in `.ui-review/events.jsonl`
 - A generic MCP server plus Claude Code skills for starting, processing, and stopping reviews
+- Atomic annotation claims and isolated process records for parallel Claude Code or Codex windows
 - Multiple reviewed apps in one repository without comment collisions
 - React Router, hash routing, and separate feedback per application route
 
@@ -132,7 +133,7 @@ ui-review --version
 claude mcp get ui-review
 ```
 
-The first command should print `0.2.0`. The MCP result should show:
+The first command should print `0.3.0`. The MCP result should show:
 
 ```text
 Scope: User config (available in all your projects)
@@ -175,7 +176,7 @@ Ask Claude to implement the open feedback:
 /review-feedback
 ```
 
-Claude reads annotations through MCP, moves accepted work to **In progress**, implements and verifies the changes, replies in each thread, and moves completed items to **Ready for review**. Only the human reviewer marks an annotation **Resolved**.
+Claude claims each selected annotation through MCP, moves it to **In progress**, implements and verifies the change, replies in its thread, and moves it to **Ready for review**. The claim is then released. Only the human reviewer marks an annotation **Resolved**.
 
 When the review session is finished, stop only its managed processes:
 
@@ -183,14 +184,29 @@ When the review session is finished, stop only its managed processes:
 /stop-ui-review
 ```
 
-The stop skill preserves `.ui-review/events.jsonl` and leaves development servers running when it did not start them.
+The stop skill targets the session ID returned by `/start-ui-review`, preserves `.ui-review/events.jsonl`, and leaves development servers running when that session did not start them.
+
+### Use multiple Claude Code windows safely
+
+Multiple Claude Code or Codex windows may use the same project concurrently. Each MCP process derives a distinct local agent-session identity. Before an agent can change a thread, status, or deletion state, it must atomically claim that annotation. A second window sees `another_session` and cannot mutate the item until the first window releases it or its 30-minute lease expires.
+
+Review proxy processes are isolated separately:
+
+- `/start-ui-review` generates a review session UUID and asks the operating system for a free port with `--port 0`.
+- Process metadata and logs live under `.ui-review/sessions/<session-id>.*` rather than one shared `session.json`.
+- `/stop-ui-review` stops only the session ID from the current conversation. If several sessions exist and no ID is known, it asks which one to stop.
+- Different projects continue to use independent `.ui-review` directories. Different apps in one project share the event store but remain separated by `appId`.
+
+If an agent window closes unexpectedly, its proxy process remains manageable through the recorded review session and its annotation claims expire automatically. There is deliberately no silent claim takeover.
 
 ### Verify MCP tools when feedback cannot be loaded
 
-The MCP server exposes these five tools:
+The MCP server exposes these seven tools:
 
 - `ui_review_list_annotations`
 - `ui_review_get_annotation`
+- `ui_review_claim_annotation`
+- `ui_review_release_annotation`
 - `ui_review_set_status`
 - `ui_review_reply`
 - `ui_review_delete_annotation`
@@ -290,6 +306,7 @@ Agent reads are deliberately progressive:
 
 - `ui_review_list_annotations` returns compact summaries: ID, status, route, short initial comment, message count, and a minimal target reference.
 - `ui_review_get_annotation` returns full DOM or region context only for the one annotation the agent is about to process. Persistence-only message IDs and timestamps are omitted.
+- Claim information exposes only `this_session` or `another_session`; raw agent-session identifiers are never sent in annotation results.
 - Status changes, replies, and deletions return small acknowledgements instead of repeating the annotation.
 
 This keeps the durable history intact while preventing a review with many annotations from consuming the agent context all at once. Agents should filter the list to `open` and `in_progress`, then load selected items individually.
@@ -310,7 +327,7 @@ The detailed trade-offs and delivery plan live in [docs/implementation-plan.md](
 
 ## Current scope
 
-The first release is local-first and intended for one reviewer plus one coding-agent session. Authentication, shared cloud deployments, simultaneous reviewers, screenshot attachments, and framework-specific source maps are deliberately deferred.
+The current release is local-first and supports one reviewer with multiple coordinated local coding-agent windows. Authentication, shared cloud deployments, simultaneous human reviewers, screenshot attachments, and framework-specific source maps are deliberately deferred.
 
 ## License
 

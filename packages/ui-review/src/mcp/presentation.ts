@@ -1,9 +1,15 @@
 import type { Annotation, AnnotationTarget, ThreadMessage } from "../shared/types.js";
+import type { AnnotationClaim } from "./annotation-claims.js";
 
 const summaryTextLimit = 320;
 const summarySelectorLimit = 300;
 
 type AgentMessage = Pick<ThreadMessage, "author" | "text">;
+
+export type AgentClaim = {
+  readonly expiresAt: string;
+  readonly owner: "another_session" | "this_session";
+};
 
 type AnnotationSummaryTarget =
   | {
@@ -24,17 +30,22 @@ export type AnnotationSummary = {
   readonly pageUrl: string;
   readonly status: Annotation["status"];
   readonly target: AnnotationSummaryTarget;
+  readonly claim?: AgentClaim;
 };
 
 export type AgentAnnotation = Pick<
   Annotation,
   "appId" | "id" | "pageTitle" | "pageUrl" | "status" | "target"
 > & {
+  readonly claim?: AgentClaim;
   readonly messages: readonly AgentMessage[];
 };
 
 /** Project an annotation into the compact overview used for agent discovery. */
-export function summarizeAnnotation(annotation: Annotation): AnnotationSummary {
+export function summarizeAnnotation(
+  annotation: Annotation,
+  claim?: AgentClaim,
+): AnnotationSummary {
   const firstMessage = annotation.messages[0];
   return {
     appId: annotation.appId,
@@ -44,11 +55,12 @@ export function summarizeAnnotation(annotation: Annotation): AnnotationSummary {
     pageUrl: annotation.pageUrl,
     status: annotation.status,
     target: summarizeTarget(annotation.target),
+    ...(claim === undefined ? {} : { claim }),
   };
 }
 
 /** Remove persistence-only identifiers and timestamps from one agent-facing annotation. */
-export function presentAnnotation(annotation: Annotation): AgentAnnotation {
+export function presentAnnotation(annotation: Annotation, claim?: AgentClaim): AgentAnnotation {
   return {
     appId: annotation.appId,
     id: annotation.id,
@@ -57,7 +69,18 @@ export function presentAnnotation(annotation: Annotation): AgentAnnotation {
     pageUrl: annotation.pageUrl,
     status: annotation.status,
     target: annotation.target,
+    ...(claim === undefined ? {} : { claim }),
   };
+}
+
+/** Hide raw session identifiers while showing whether the current agent owns a lease. */
+export function presentClaim(claim: AnnotationClaim | undefined, agentId: string): AgentClaim | undefined {
+  return claim === undefined
+    ? undefined
+    : {
+        expiresAt: claim.expiresAt,
+        owner: claim.agentId === agentId ? "this_session" : "another_session",
+      };
 }
 
 function summarizeTarget(target: AnnotationTarget): AnnotationSummaryTarget {
