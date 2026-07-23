@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Product Demo Video"
+  short_description: "Create polished, human-paced product demo videos"
+  default_prompt: "Use $create-product-demo-video to produce a polished product demo with natural cursor and typing motion."
