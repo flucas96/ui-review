@@ -18,6 +18,17 @@ It is designed for remote development over SSH: the proxy, feedback store, and c
 
 **[Watch the complete workflow](./docs/demo/ui-review-full-workflow.mp4)** — a human starts UI Review in Claude Code, switches to the browser to annotate the page, hands the note back to the coding agent, watches the implementation, and resolves the verified result.
 
+### Social teaser — 12 seconds
+
+<table>
+  <tr>
+    <td width="38%"><a href="./docs/demo/ui-review-social-teaser.mp4"><img src="./docs/images/ui-review-social-teaser-poster.jpg" alt="UI Review social teaser"></a></td>
+    <td><strong>Fast 4:5 social cut</strong><br>Designed for LinkedIn, Instagram, and X feeds. The complete workflow is compressed into a text-first, sound-off-friendly teaser.<br><br><a href="./docs/demo/ui-review-social-teaser.mp4">Watch the social teaser</a></td>
+  </tr>
+</table>
+
+All formats and recommended uses are listed in the **[video library](./docs/demo/README.md)**.
+
 ![UI Review comment overview on a plain HTML site](./docs/images/html-review-comments.jpg)
 
 The same review layer works with React applications and responsive layouts.
