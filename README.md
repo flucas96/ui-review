@@ -193,7 +193,7 @@ Multiple Claude Code or Codex windows may use the same project concurrently. Eac
 Review proxy processes are isolated separately:
 
 - `/start-ui-review` generates a review session UUID and asks the operating system for a free port with `--port 0`.
-- Process metadata and logs live under `.ui-review/sessions/<session-id>.*` rather than one shared `session.json`.
+- Process metadata and logs live under `.ui-review/sessions/<session-id>.*`.
 - `/stop-ui-review` stops only the session ID from the current conversation. If several sessions exist and no ID is known, it asks which one to stop.
 - Different projects continue to use independent `.ui-review` directories. Different apps in one project share the event store but remain separated by `appId`.
 
