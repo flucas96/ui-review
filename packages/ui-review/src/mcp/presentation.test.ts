@@ -22,6 +22,15 @@ const annotation: Annotation = {
   ],
   pageTitle: "Work",
   pageUrl: "/work?view=cards",
+  screenshots: [{
+    byteSize: 2048,
+    createdAt: "2026-07-20T10:00:00.000Z",
+    fileName: "work.png",
+    height: 720,
+    id: "00000000-0000-0000-0000-000000000000.png",
+    mimeType: "image/png",
+    width: 1280,
+  }],
   status: "in_progress",
   target: {
     accessibility: { role: "article" },
@@ -48,6 +57,7 @@ describe("agent-facing annotation presentation", () => {
       id: "annotation-1",
       messageCount: 2,
       pageUrl: "/work?view=cards",
+      screenshotCount: 1,
       status: "in_progress",
       target: {
         selector: "main > section > article:nth-of-type(2)",
@@ -67,6 +77,14 @@ describe("agent-facing annotation presentation", () => {
       { author: "user", text: annotation.messages[0]?.text },
       { author: "agent", text: "I will tighten the hierarchy." },
     ]);
+    expect(detail.screenshots).toEqual([{
+      byteSize: 2048,
+      fileName: "work.png",
+      height: 720,
+      mimeType: "image/png",
+      relativePath: ".ui-review/attachments/00000000-0000-0000-0000-000000000000.png",
+      width: 1280,
+    }]);
     expect(detail).not.toHaveProperty("createdAt");
     expect(detail).not.toHaveProperty("updatedAt");
   });

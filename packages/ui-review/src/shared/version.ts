@@ -1,1 +1,1 @@
-export const uiReviewVersion = "0.3.0";
+export const uiReviewVersion = "0.4.0";

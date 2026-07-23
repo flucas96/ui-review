@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReviewApi } from "./api.js";
+import { ScreenshotAttachmentStore } from "./attachment-store.js";
 import { ReviewEventStore } from "./event-store.js";
 import { resolveStaticTarget, serveStaticTarget, type StaticTarget } from "./static-target.js";
 import { UpstreamProxy } from "./upstream-proxy.js";
@@ -34,8 +35,9 @@ export async function startReviewServer(options: ReviewServerOptions): Promise<R
   const requestedPort = options.port ?? 4317;
   const browserBundle = await readFile(findBrowserBundle());
   const store = new ReviewEventStore(options.projectRoot);
-  await store.initialize();
-  const api = new ReviewApi(store, browserBundle);
+  const attachments = new ScreenshotAttachmentStore(options.projectRoot);
+  await Promise.all([store.initialize(), attachments.initialize()]);
+  const api = new ReviewApi(store, attachments, browserBundle);
   const appId = options.appId ?? defaultAppId(options.target);
   const includeHash = options.includeHash ?? false;
   const target = await resolveTarget(options.target, appId, includeHash);

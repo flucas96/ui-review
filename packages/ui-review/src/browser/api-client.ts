@@ -2,6 +2,8 @@ import type {
   Annotation,
   AnnotationStatus,
   CreateAnnotationInput,
+  ScreenshotAttachment,
+  UpdateAnnotationInput,
 } from "../shared/types.js";
 
 const apiPrefix = "/__ui_review";
@@ -14,6 +16,10 @@ type AnnotationListResponse = {
   readonly annotations: readonly Annotation[];
 };
 
+type ScreenshotResponse = {
+  readonly screenshot: ScreenshotAttachment;
+};
+
 /** Browser-side client for annotations, replies, statuses, and live changes. */
 export class ReviewApiClient {
   readonly #appId: string;
@@ -22,9 +28,12 @@ export class ReviewApiClient {
     this.#appId = appId;
   }
 
-  /** List every annotation attached to an exact page URL. */
-  public async list(pageUrl: string): Promise<readonly Annotation[]> {
-    const query = new URLSearchParams({ appId: this.#appId, pageUrl });
+  /** List annotations for this application, optionally limited to one page URL. */
+  public async list(pageUrl?: string): Promise<readonly Annotation[]> {
+    const query = new URLSearchParams({ appId: this.#appId });
+    if (pageUrl !== undefined) {
+      query.set("pageUrl", pageUrl);
+    }
     const response = await requestJson<AnnotationListResponse>(`${apiPrefix}/annotations?${query.toString()}`);
     return response.annotations;
   }
@@ -37,6 +46,42 @@ export class ReviewApiClient {
       method: "POST",
     });
     return response.annotation;
+  }
+
+  /** Edit the initial comment or move an annotation to a new visual target. */
+  public async update(annotationId: string, input: UpdateAnnotationInput): Promise<Annotation> {
+    const response = await requestJson<AnnotationResponse>(
+      `${apiPrefix}/annotations/${encodeURIComponent(annotationId)}`,
+      {
+        body: JSON.stringify(input),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      },
+    );
+    return response.annotation;
+  }
+
+  /** Upload one local screenshot and return its persisted metadata. */
+  public async uploadScreenshot(
+    file: File,
+    dimensions: { readonly height: number; readonly width: number },
+  ): Promise<ScreenshotAttachment> {
+    const response = await requestJson<ScreenshotResponse>(`${apiPrefix}/screenshots`, {
+      body: file,
+      headers: {
+        "content-type": file.type,
+        "x-ui-review-file-name": encodeURIComponent(file.name),
+        "x-ui-review-height": String(dimensions.height),
+        "x-ui-review-width": String(dimensions.width),
+      },
+      method: "POST",
+    });
+    return response.screenshot;
+  }
+
+  /** Return the same-origin URL for a persisted screenshot. */
+  public screenshotUrl(attachmentId: string): string {
+    return `${apiPrefix}/screenshots/${encodeURIComponent(attachmentId)}`;
   }
 
   /** Add a human reply to an annotation thread. */
@@ -74,7 +119,8 @@ export class ReviewApiClient {
 
   /** Subscribe to changes written by either the browser or an MCP agent process. */
   public subscribe(onChange: () => void): () => void {
-    const events = new EventSource(`${apiPrefix}/events`);
+    const query = new URLSearchParams({ appId: this.#appId });
+    const events = new EventSource(`${apiPrefix}/events?${query.toString()}`);
     events.addEventListener("change", onChange);
     return () => events.close();
   }

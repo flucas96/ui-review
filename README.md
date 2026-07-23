@@ -50,8 +50,13 @@ The same review layer works with React applications and responsive layouts.
 - Built HTML sites, individual HTML files, and static directories
 - Element selection with selector, DOM path, text, accessibility, layout, and style context
 - Free-form rectangular area feedback
+- Uninterrupted quick annotation: the selected tool stays active while threads remain closed until explicitly opened
+- PNG, JPEG, and WebP screenshot attachments through file selection or clipboard paste
+- Compact pin previews plus target location, missing-target detection, and re-anchoring
 - Threaded reviewer and agent replies with live updates
-- One-click Resolve/Reopen actions and bulk resolution from the comments overview; resolved items are archived behind Show resolved
+- Editable initial comments and ready-to-paste agent instructions with screenshot paths
+- Current-page and app-wide review views with route, status, and agent-activity filters
+- One-click Resolve/Reopen actions and bulk resolution from the comments overview
 - `open`, `in_progress`, `review`, and `resolved` states
 - Local append-only storage in `.ui-review/events.jsonl`
 - A generic MCP server plus Claude Code skills for starting, processing, and stopping reviews
@@ -82,7 +87,7 @@ node packages/ui-review/dist/cli.js http://127.0.0.1:5173 --app react-fixture
 
 Open `http://127.0.0.1:4317` with **Browser: Open Integrated Browser** in VS Code. With Remote SSH, accept VS Code's port-forwarding prompt if it appears.
 
-The small violet button opens the toolbar. Choose **Element** to target a rendered element or **Area** to draw anywhere on the page. Submit a comment, then run `/review-feedback` in Claude Code. Agent replies and status changes appear in the open thread without a reload.
+The small violet button opens the toolbar. Choose **Element** to target a rendered element or **Area** to draw anywhere on the page. After submission, the thread stays closed and the selected tool remains active so you can continue annotating; press **Esc** to stop. Hover or focus a pin for a compact preview, and click it only when you want the full thread. Screenshots can be selected or pasted directly into the composer. Agent replies and status changes appear without a reload. As a standalone alternative, open **Comments** and use the copy icon in the panel header to copy every visible active annotation as a ready-to-paste implementation instruction.
 
 ## Use it with an existing app
 
@@ -154,7 +159,7 @@ ui-review --version
 claude mcp get ui-review
 ```
 
-The first command should print `0.3.0`. The MCP result should show:
+The first command should print `0.4.0`. The MCP result should show:
 
 ```text
 Scope: User config (available in all your projects)
@@ -321,12 +326,12 @@ The reverse proxy keeps review code out of the target application and makes the 
 
 ### Agent data and event-log size
 
-`.ui-review/events.jsonl` is the local append-only history. It contains complete target metadata plus status and message events so discussions remain recoverable, but the MCP server does not send that whole file to an agent.
+`.ui-review/events.jsonl` is the local append-only history. It contains complete target metadata plus status and message events so discussions remain recoverable, but the MCP server does not send that whole file to an agent. Screenshot bytes are stored separately under `.ui-review/attachments/`; events retain only validated metadata.
 
 Agent reads are deliberately progressive:
 
 - `ui_review_list_annotations` returns compact summaries: ID, status, route, short initial comment, message count, and a minimal target reference.
-- `ui_review_get_annotation` returns full DOM or region context only for the one annotation the agent is about to process. Persistence-only message IDs and timestamps are omitted.
+- `ui_review_get_annotation` returns full DOM or region context and project-relative screenshot paths only for the one annotation the agent is about to process. Persistence-only message IDs and timestamps are omitted.
 - Claim information exposes only `this_session` or `another_session`; raw agent-session identifiers are never sent in annotation results.
 - Status changes, replies, and deletions return small acknowledgements instead of repeating the annotation.
 
@@ -348,7 +353,7 @@ The detailed trade-offs and delivery plan live in [docs/implementation-plan.md](
 
 ## Current scope
 
-The current release is local-first and supports one reviewer with multiple coordinated local coding-agent windows. Authentication, shared cloud deployments, simultaneous human reviewers, screenshot attachments, and framework-specific source maps are deliberately deferred.
+The current release is local-first and supports one reviewer with multiple coordinated local coding-agent windows. Authentication, shared cloud deployments, simultaneous human reviewers, automatic browser screen capture, and framework-specific source maps are deliberately deferred.
 
 ## License
 

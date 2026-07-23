@@ -1,4 +1,9 @@
-import type { Annotation, AnnotationTarget, ThreadMessage } from "../shared/types.js";
+import type {
+  Annotation,
+  AnnotationTarget,
+  ScreenshotAttachment,
+  ThreadMessage,
+} from "../shared/types.js";
 import type { AnnotationClaim } from "./annotation-claims.js";
 
 const summaryTextLimit = 320;
@@ -28,6 +33,7 @@ export type AnnotationSummary = {
   readonly id: string;
   readonly messageCount: number;
   readonly pageUrl: string;
+  readonly screenshotCount: number;
   readonly status: Annotation["status"];
   readonly target: AnnotationSummaryTarget;
   readonly claim?: AgentClaim;
@@ -39,6 +45,14 @@ export type AgentAnnotation = Pick<
 > & {
   readonly claim?: AgentClaim;
   readonly messages: readonly AgentMessage[];
+  readonly screenshots: readonly AgentScreenshot[];
+};
+
+type AgentScreenshot = Pick<
+  ScreenshotAttachment,
+  "byteSize" | "fileName" | "height" | "mimeType" | "width"
+> & {
+  readonly relativePath: string;
 };
 
 /** Project an annotation into the compact overview used for agent discovery. */
@@ -53,6 +67,7 @@ export function summarizeAnnotation(
     id: annotation.id,
     messageCount: annotation.messages.length,
     pageUrl: annotation.pageUrl,
+    screenshotCount: annotation.screenshots?.length ?? 0,
     status: annotation.status,
     target: summarizeTarget(annotation.target),
     ...(claim === undefined ? {} : { claim }),
@@ -67,9 +82,21 @@ export function presentAnnotation(annotation: Annotation, claim?: AgentClaim): A
     messages: annotation.messages.map(({ author, text }) => ({ author, text })),
     pageTitle: annotation.pageTitle,
     pageUrl: annotation.pageUrl,
+    screenshots: (annotation.screenshots ?? []).map(presentScreenshot),
     status: annotation.status,
     target: annotation.target,
     ...(claim === undefined ? {} : { claim }),
+  };
+}
+
+function presentScreenshot(screenshot: ScreenshotAttachment): AgentScreenshot {
+  return {
+    byteSize: screenshot.byteSize,
+    fileName: screenshot.fileName,
+    height: screenshot.height,
+    mimeType: screenshot.mimeType,
+    relativePath: `.ui-review/attachments/${screenshot.id}`,
+    width: screenshot.width,
   };
 }
 

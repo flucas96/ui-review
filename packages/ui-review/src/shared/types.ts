@@ -39,6 +39,16 @@ export type RegionTarget = {
 
 export type AnnotationTarget = ElementTarget | RegionTarget;
 
+export type ScreenshotAttachment = {
+  readonly byteSize: number;
+  readonly createdAt: string;
+  readonly fileName: string;
+  readonly height: number;
+  readonly id: string;
+  readonly mimeType: "image/jpeg" | "image/png" | "image/webp";
+  readonly width: number;
+};
+
 export type ThreadMessage = {
   readonly author: ReviewAuthor;
   readonly createdAt: string;
@@ -53,6 +63,7 @@ export type Annotation = {
   readonly messages: readonly ThreadMessage[];
   readonly pageTitle: string;
   readonly pageUrl: string;
+  readonly screenshots?: readonly ScreenshotAttachment[] | undefined;
   readonly status: AnnotationStatus;
   readonly target: AnnotationTarget;
   readonly updatedAt: string;
@@ -63,7 +74,15 @@ export type CreateAnnotationInput = {
   readonly comment: string;
   readonly pageTitle: string;
   readonly pageUrl: string;
+  readonly screenshots?: readonly ScreenshotAttachment[] | undefined;
   readonly target: AnnotationTarget;
+};
+
+export type UpdateAnnotationInput = {
+  readonly comment?: string | undefined;
+  readonly pageTitle?: string | undefined;
+  readonly pageUrl?: string | undefined;
+  readonly target?: AnnotationTarget | undefined;
 };
 
 export type AnnotationCreatedEvent = {
@@ -75,15 +94,19 @@ export type AnnotationCreatedEvent = {
 
 export type MessageAddedEvent = {
   readonly annotationId: string;
+  readonly appId?: string | undefined;
   readonly eventId: string;
   readonly message: ThreadMessage;
+  readonly pageUrl?: string | undefined;
   readonly timestamp: string;
   readonly type: "message.added";
 };
 
 export type StatusChangedEvent = {
   readonly annotationId: string;
+  readonly appId?: string | undefined;
   readonly eventId: string;
+  readonly pageUrl?: string | undefined;
   readonly status: AnnotationStatus;
   readonly timestamp: string;
   readonly type: "status.changed";
@@ -91,14 +114,29 @@ export type StatusChangedEvent = {
 
 export type AnnotationDeletedEvent = {
   readonly annotationId: string;
+  readonly appId?: string | undefined;
   readonly eventId: string;
+  readonly pageUrl?: string | undefined;
   readonly timestamp: string;
   readonly type: "annotation.deleted";
+};
+
+export type AnnotationUpdatedEvent = {
+  readonly annotationId: string;
+  readonly appId?: string | undefined;
+  readonly comment?: string | undefined;
+  readonly eventId: string;
+  readonly pageTitle?: string | undefined;
+  readonly pageUrl?: string | undefined;
+  readonly target?: AnnotationTarget | undefined;
+  readonly timestamp: string;
+  readonly type: "annotation.updated";
 };
 
 export type ReviewEvent =
   | AnnotationCreatedEvent
   | AnnotationDeletedEvent
+  | AnnotationUpdatedEvent
   | MessageAddedEvent
   | StatusChangedEvent;
 

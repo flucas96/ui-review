@@ -1,6 +1,6 @@
 {
   "name": "ui-review",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first visual feedback for web applications and coding agents",
   "type": "module",
   "bin": {

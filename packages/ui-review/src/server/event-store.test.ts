@@ -47,6 +47,30 @@ describe("ReviewEventStore", () => {
     await expect(store.list()).resolves.toEqual([]);
   });
 
+  it("folds edited comments and re-anchored targets into the current annotation", async () => {
+    const store = await createStore();
+    const annotation = await store.create(annotationInput("dashboard", "/reports", "Original comment"));
+    const target = {
+      boundingBox: { height: 48, width: 160, x: 80, y: 120 },
+      shape: "rectangle" as const,
+      type: "region" as const,
+      viewport: { height: 900, scrollX: 0, scrollY: 0, width: 1440 },
+    };
+
+    await store.update(annotation.id, { comment: "Updated comment" });
+    const updated = await store.update(annotation.id, {
+      pageTitle: "Settings",
+      pageUrl: "/settings",
+      target,
+    });
+
+    expect(updated.messages[0]?.text).toBe("Updated comment");
+    expect(updated.pageTitle).toBe("Settings");
+    expect(updated.pageUrl).toBe("/settings");
+    expect(updated.target).toEqual(target);
+    expect((await readFile(store.filePath, "utf8")).trim().split("\n")).toHaveLength(3);
+  });
+
   it("serializes concurrent writes from separate store instances", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ui-review-concurrent-"));
     temporaryDirectories.push(directory);

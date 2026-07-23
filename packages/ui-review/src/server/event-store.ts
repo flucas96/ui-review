@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
-import { unwatchFile, watchFile } from "node:fs";
+import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
+import { type Stats, unwatchFile, watchFile } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type {
   Annotation,
@@ -9,6 +9,7 @@ import type {
   ReviewAuthor,
   ReviewEvent,
   ThreadMessage,
+  UpdateAnnotationInput,
 } from "../shared/types.js";
 import { reviewEventSchema } from "./validation.js";
 import { withFileMutex } from "./file-mutex.js";
@@ -19,7 +20,7 @@ type AnnotationQuery = {
   readonly status?: AnnotationStatus;
 };
 
-type StoreListener = () => void;
+type StoreListener = (event?: ReviewEvent) => void;
 
 /** Error raised when an annotation identifier no longer exists. */
 export class AnnotationNotFoundError extends Error {
@@ -34,6 +35,7 @@ export class ReviewEventStore {
   public readonly filePath: string;
   readonly #listeners = new Set<StoreListener>();
   readonly #lockPath: string;
+  #observedSize = 0;
   #watching = false;
 
   public constructor(projectRoot: string) {
@@ -45,6 +47,7 @@ export class ReviewEventStore {
   public async initialize(): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     await appendFile(this.filePath, "", { encoding: "utf8" });
+    this.#observedSize = (await stat(this.filePath)).size;
   }
 
   /** Return the current annotations after folding every persisted event. */
@@ -82,6 +85,7 @@ export class ReviewEventStore {
       messages: [message],
       pageTitle: input.pageTitle,
       pageUrl: input.pageUrl,
+      ...(input.screenshots === undefined ? {} : { screenshots: input.screenshots }),
       status: "open",
       target: input.target,
       updatedAt: timestamp,
@@ -97,44 +101,74 @@ export class ReviewEventStore {
 
   /** Append a human or agent reply to an existing annotation thread. */
   public async addMessage(annotationId: string, author: ReviewAuthor, text: string): Promise<Annotation> {
-    await this.get(annotationId);
+    const current = await this.get(annotationId);
     const timestamp = new Date().toISOString();
+    const message: ThreadMessage = {
+      author,
+      createdAt: timestamp,
+      id: randomUUID(),
+      text: text.trim(),
+    };
     await this.#append({
       annotationId,
+      appId: current.appId,
       eventId: randomUUID(),
-      message: {
-        author,
-        createdAt: timestamp,
-        id: randomUUID(),
-        text: text.trim(),
-      },
+      message,
+      pageUrl: current.pageUrl,
       timestamp,
       type: "message.added",
     });
-    return this.get(annotationId);
+    return {
+      ...current,
+      messages: [...current.messages, message],
+      updatedAt: timestamp,
+    };
   }
 
   /** Change the lifecycle status of an annotation. */
   public async setStatus(annotationId: string, status: AnnotationStatus): Promise<Annotation> {
-    await this.get(annotationId);
+    const current = await this.get(annotationId);
     const timestamp = new Date().toISOString();
     await this.#append({
       annotationId,
+      appId: current.appId,
       eventId: randomUUID(),
+      pageUrl: current.pageUrl,
       status,
       timestamp,
       type: "status.changed",
     });
-    return this.get(annotationId);
+    return { ...current, status, updatedAt: timestamp };
+  }
+
+  /** Edit the initial comment or re-anchor an annotation to a new target. */
+  public async update(annotationId: string, input: UpdateAnnotationInput): Promise<Annotation> {
+    const current = await this.get(annotationId);
+    const timestamp = new Date().toISOString();
+    const pageUrl = input.pageUrl ?? current.pageUrl;
+    await this.#append({
+      annotationId,
+      appId: current.appId,
+      ...(input.comment === undefined ? {} : { comment: input.comment.trim() }),
+      eventId: randomUUID(),
+      ...(input.pageTitle === undefined ? {} : { pageTitle: input.pageTitle }),
+      pageUrl,
+      ...(input.target === undefined ? {} : { target: input.target }),
+      timestamp,
+      type: "annotation.updated",
+    });
+    return applyAnnotationUpdate(current, input, timestamp);
   }
 
   /** Remove an annotation from the folded view while retaining its history. */
   public async delete(annotationId: string): Promise<void> {
-    await this.get(annotationId);
+    const current = await this.get(annotationId);
     const timestamp = new Date().toISOString();
     await this.#append({
       annotationId,
+      appId: current.appId,
       eventId: randomUUID(),
+      pageUrl: current.pageUrl,
       timestamp,
       type: "annotation.deleted",
     });
@@ -144,29 +178,38 @@ export class ReviewEventStore {
   public subscribe(listener: StoreListener): () => void {
     this.#listeners.add(listener);
     if (!this.#watching) {
-      watchFile(this.filePath, { interval: 300 }, this.#notify);
+      watchFile(this.filePath, { interval: 300 }, this.#handleFileChange);
       this.#watching = true;
     }
     return () => {
       this.#listeners.delete(listener);
       if (this.#listeners.size === 0 && this.#watching) {
-        unwatchFile(this.filePath, this.#notify);
+        unwatchFile(this.filePath, this.#handleFileChange);
         this.#watching = false;
       }
     };
   }
 
-  readonly #notify = (): void => {
+  readonly #handleFileChange = (current: Stats): void => {
+    if (current.size === this.#observedSize) {
+      return;
+    }
+    this.#observedSize = current.size;
+    this.#notify();
+  };
+
+  readonly #notify = (event?: ReviewEvent): void => {
     for (const listener of this.#listeners) {
-      listener();
+      listener(event);
     }
   };
 
   async #append(event: ReviewEvent): Promise<void> {
     await withFileMutex(this.#lockPath, async () => {
       await appendFile(this.filePath, `${JSON.stringify(event)}\n`, { encoding: "utf8" });
+      this.#observedSize = (await stat(this.filePath)).size;
     });
-    this.#notify();
+    this.#notify(event);
   }
 
   async #fold(): Promise<Map<string, Annotation>> {
@@ -211,6 +254,11 @@ export class ReviewEventStore {
         continue;
       }
 
+      if (event.type === "annotation.updated") {
+        annotations.set(event.annotationId, applyAnnotationUpdate(current, event, event.timestamp));
+        continue;
+      }
+
       annotations.set(event.annotationId, {
         ...current,
         status: event.status,
@@ -220,4 +268,26 @@ export class ReviewEventStore {
 
     return annotations;
   }
+}
+
+function applyAnnotationUpdate(
+  annotation: Annotation,
+  input: UpdateAnnotationInput,
+  timestamp: string,
+): Annotation {
+  const firstMessage = annotation.messages[0];
+  const messages = input.comment === undefined || firstMessage === undefined
+    ? annotation.messages
+    : [
+        { ...firstMessage, text: input.comment.trim() },
+        ...annotation.messages.slice(1),
+      ];
+  return {
+    ...annotation,
+    messages,
+    pageTitle: input.pageTitle ?? annotation.pageTitle,
+    pageUrl: input.pageUrl ?? annotation.pageUrl,
+    target: input.target ?? annotation.target,
+    updatedAt: timestamp,
+  };
 }

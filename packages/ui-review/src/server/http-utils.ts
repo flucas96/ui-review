@@ -4,27 +4,37 @@ const maxBodyBytes = 1_000_000;
 
 /** Read and parse a size-limited JSON request body. */
 export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const body = await readRequestBody(request, maxBodyBytes, "Request body exceeds 1 MB");
+  if (body.byteLength === 0) {
+    throw new RequestBodyError("A JSON request body is required", 400);
+  }
+
+  try {
+    return JSON.parse(body.toString("utf8")) as unknown;
+  } catch (error: unknown) {
+    throw new RequestBodyError("Request body is not valid JSON", 400, error);
+  }
+}
+
+/** Read a request body while enforcing an explicit byte limit. */
+export async function readRequestBody(
+  request: IncomingMessage,
+  maximumBytes: number,
+  limitMessage = "Request body is too large",
+): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
 
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
     totalBytes += buffer.byteLength;
-    if (totalBytes > maxBodyBytes) {
-      throw new RequestBodyError("Request body exceeds 1 MB", 413);
+    if (totalBytes > maximumBytes) {
+      throw new RequestBodyError(limitMessage, 413);
     }
     chunks.push(buffer);
   }
 
-  if (chunks.length === 0) {
-    throw new RequestBodyError("A JSON request body is required", 400);
-  }
-
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-  } catch (error: unknown) {
-    throw new RequestBodyError("Request body is not valid JSON", 400, error);
-  }
+  return Buffer.concat(chunks);
 }
 
 /** Send a JSON response with safe development-tool defaults. */
