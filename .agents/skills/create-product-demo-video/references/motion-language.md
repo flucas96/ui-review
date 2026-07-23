@@ -27,6 +27,9 @@ Combine three cues:
 - emit a 320–500 ms ripple from the pointer hotspot;
 - let the UI's real pressed/focus state remain visible.
 
+Apply travel transforms to the outer `.demo-pointer` and pressed-state transforms to its
+`.demo-pointer-shape` child so click feedback cannot overwrite the cursor position.
+
 The ripple should begin at pointer-down, not after the resulting UI transition.
 
 ## Typing

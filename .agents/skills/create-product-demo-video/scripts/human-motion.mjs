@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "node:url";
+
 /**
  * Generate reproducible, human-paced pointer paths and typing timelines.
  */
@@ -185,7 +187,11 @@ export function interactionCss() {
   transform-origin: 2px 2px;
   z-index: 2147483647;
 }
-.demo-pointer.is-pressed { transform: scale(.91) rotate(-1deg); }
+.demo-pointer-shape {
+  transform-origin: 2px 2px;
+  transition: transform 90ms ease-out;
+}
+.demo-pointer.is-pressed .demo-pointer-shape { transform: scale(.91) rotate(-1deg); }
 .demo-pointer-ripple {
   animation: demo-pointer-ripple 420ms ease-out both;
   border: 2px solid rgb(120 104 255 / 78%);
@@ -278,7 +284,7 @@ function wordLengthBefore(text, index) {
   return match?.[0].length ?? 0;
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const pointer = planPointerMotion({
     start: { x: 920, y: 780 },
     end: { x: 318, y: 412 },
