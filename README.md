@@ -6,11 +6,17 @@ It is designed for remote development over SSH: the proxy, feedback store, and c
 
 ## Demo
 
-Select an element or draw an area, leave a comment, and manage the resulting review threads without modifying the app being reviewed.
+### Product tour — 54 seconds
 
 [![Watch the UI Review end-to-end demo](./docs/images/ui-review-demo-poster.jpg)](./docs/demo/ui-review-demo.mp4)
 
-**[Watch the 55-second end-to-end demo](./docs/demo/ui-review-demo.mp4)** — from launching a review and pinning feedback to the agent implementation, threaded reply, and final approval.
+**[Watch the concise product tour](./docs/demo/ui-review-demo.mp4)** — launch a review, pin visual feedback, let the agent implement it, and approve the live result.
+
+### Full human–agent workflow — 1 minute 29 seconds
+
+[![Watch the complete human and coding-agent workflow](./docs/images/ui-review-full-workflow-poster.jpg)](./docs/demo/ui-review-full-workflow.mp4)
+
+**[Watch the complete workflow](./docs/demo/ui-review-full-workflow.mp4)** — a human starts UI Review in Claude Code, switches to the browser to annotate the page, hands the note back to the coding agent, watches the implementation, and resolves the verified result.
 
 ![UI Review comment overview on a plain HTML site](./docs/images/html-review-comments.jpg)
 
