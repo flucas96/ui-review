@@ -256,6 +256,14 @@ class ReviewOverlay {
     this.#composerTextarea.addEventListener("input", () => {
       this.#composerSubmit.disabled = this.#composerTextarea.value.trim().length === 0;
     });
+    this.#composerTextarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        if (!this.#composerSubmit.disabled) {
+          void this.#submitAnnotation();
+        }
+      }
+    });
     this.#composerForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.#submitAnnotation();
@@ -1203,6 +1211,14 @@ class ReviewOverlay {
     textarea.addEventListener("input", () => {
       sendButton.disabled = textarea.value.trim().length === 0;
     });
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        if (!sendButton.disabled) {
+          replyForm.requestSubmit();
+        }
+      }
+    });
     replyForm.append(textarea, sendButton);
     replyForm.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -1297,6 +1313,18 @@ class ReviewOverlay {
     const save = element("button", "ur-button ur-button-primary") as HTMLButtonElement;
     save.type = "submit";
     setButtonContent(save, icons.check, "Save");
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        if (!save.disabled && textarea.value.trim().length > 0) {
+          editor.requestSubmit();
+        }
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.#editingCommentId = null;
+        this.#renderPanel();
+      }
+    });
     editor.addEventListener("submit", (event) => {
       event.preventDefault();
       const comment = textarea.value.trim();
