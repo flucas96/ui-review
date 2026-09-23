@@ -145,7 +145,7 @@ The installer:
 
 - Packs and installs the `ui-review` CLI globally without depending on the cloned directory afterward.
 - Synchronizes `start-ui-review`, `review-feedback`, `stop-ui-review`, and `update-ui-review` to `~/.claude/skills/`.
-- Adds a user-scoped `ui-review` MCP server that automatically uses Claude Code's active project directory.
+- Adds a user-scoped `ui-review` MCP server that automatically uses Claude Code's active project directory and also finds feedback from review sessions started with a different `--root` (see below).
 - Records the checkout path and installer choices in `~/.ui-review/installation.json` so later updates use the same setup.
 
 It updates only UI Review's personal skills and MCP entry. It does not install or reconfigure Claude Code itself.
@@ -222,6 +222,7 @@ Review proxy processes are isolated separately:
 - Process metadata and logs live under `.ui-review/sessions/<session-id>.*`.
 - `/stop-ui-review` stops only the session ID from the current conversation. If several sessions exist and no ID is known, it asks which one to stop.
 - Different projects continue to use independent `.ui-review` directories. Different apps in one project share the event store but remain separated by `appId`.
+- Every review proxy records its absolute feedback root in `~/.ui-review/roots.json`. The MCP server reads its own project root plus every registered root whose `.ui-review/events.jsonl` still exists, so feedback stays reachable even when Claude Code was started in another directory (for example `ui-review ~/Desktop/page.html --root ~/Desktop` while Claude Code runs in `~`). Claims, replies, status changes, and deletions are written back to the root that owns the annotation, and `ui_review_get_annotation` reports that root as `feedbackRoot`.
 
 If an agent window closes unexpectedly, its proxy process remains manageable through the recorded review session and its annotation claims expire automatically. There is deliberately no silent claim takeover.
 
