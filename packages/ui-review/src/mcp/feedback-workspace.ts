@@ -35,11 +35,6 @@ export class FeedbackWorkspace {
     this.#registryPath = registryPath;
   }
 
-  /** Ensure the primary root's data directories exist. */
-  public async initialize(): Promise<void> {
-    await Promise.all([this.#primary.store.initialize(), this.#primary.claims.initialize()]);
-  }
-
   /** List annotations across every root that has an event log, oldest first. */
   public async list(query: AnnotationQuery = {}): Promise<readonly LocatedAnnotation[]> {
     const perRoot = await Promise.all((await this.#activeRoots()).map(async (root) =>

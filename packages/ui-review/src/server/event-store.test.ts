@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,16 @@ describe("ReviewEventStore", () => {
     expect(updated.messages.map((message) => message.author)).toEqual(["user", "agent"]);
     expect(updated.messages[1]?.text).toBe("I updated the chart composition.");
     expect((await readFile(store.filePath, "utf8")).trim().split("\n")).toHaveLength(3);
+  });
+
+  it("reads an empty history without creating the review directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ui-review-lazy-"));
+    temporaryDirectories.push(directory);
+    const store = new ReviewEventStore(directory);
+
+    await expect(store.list()).resolves.toEqual([]);
+    await expect(store.get("missing")).rejects.toBeInstanceOf(AnnotationNotFoundError);
+    expect(existsSync(join(directory, ".ui-review"))).toBe(false);
   });
 
   it("isolates annotations by application and route", async () => {

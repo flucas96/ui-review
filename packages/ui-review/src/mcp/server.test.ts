@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -58,9 +58,9 @@ describe("MCP server feedback roots", () => {
     const proxyAnnotation = await new ReviewEventStore(proxyRoot).get(annotationId);
     expect(proxyAnnotation.status).toBe("review");
     expect(proxyAnnotation.messages.map((message) => message.author)).toEqual(["user", "agent"]);
-    expect(await readFile(join(mcpRoot, ".ui-review", "events.jsonl"), "utf8")).toBe("");
     expect((await stat(join(proxyRoot, ".ui-review", "claims"))).isDirectory()).toBe(true);
-    expect(await readdir(join(mcpRoot, ".ui-review", "claims"))).toEqual([]);
+    await expect(stat(join(mcpRoot, ".ui-review", "events.jsonl"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(mcpRoot, ".ui-review", "claims"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("keeps serving the MCP project root when no review session has been registered", async () => {

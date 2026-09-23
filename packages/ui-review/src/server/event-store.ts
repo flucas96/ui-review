@@ -213,7 +213,22 @@ export class ReviewEventStore {
   }
 
   async #fold(): Promise<Map<string, Annotation>> {
+    if (!(await this.#exists())) {
+      return new Map();
+    }
     return withFileMutex(this.#lockPath, async () => this.#foldUnlocked());
+  }
+
+  async #exists(): Promise<boolean> {
+    try {
+      await stat(this.filePath);
+      return true;
+    } catch (error: unknown) {
+      if (isNodeError(error, "ENOENT")) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async #foldUnlocked(): Promise<Map<string, Annotation>> {
@@ -268,6 +283,10 @@ export class ReviewEventStore {
 
     return annotations;
   }
+}
+
+function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === code;
 }
 
 function applyAnnotationUpdate(

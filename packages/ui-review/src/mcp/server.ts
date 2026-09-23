@@ -26,7 +26,6 @@ export async function createMcpServer(
 ): Promise<McpServer> {
   const workspace = new FeedbackWorkspace(projectRoot, registryPath);
   const agentId = agentSessionId(projectRoot);
-  await workspace.initialize();
   const server = new McpServer(
     { name: "ui-review", version: uiReviewVersion },
     {
