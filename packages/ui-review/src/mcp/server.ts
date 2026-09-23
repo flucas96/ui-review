@@ -3,17 +3,28 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { annotationStatuses } from "../shared/types.js";
 import { uiReviewVersion } from "../shared/version.js";
-import { ReviewEventStore } from "../server/event-store.js";
+import { defaultFeedbackRootRegistry } from "../server/feedback-roots.js";
 import { agentSessionId } from "./agent-session.js";
-import { AnnotationClaimStore } from "./annotation-claims.js";
+import { FeedbackWorkspace } from "./feedback-workspace.js";
 import { presentAnnotation, presentClaim, summarizeAnnotation } from "./presentation.js";
 
 const annotationStatusSchema = z.enum(annotationStatuses);
 
 /** Run the stdio MCP bridge for a project's persisted review feedback. */
 export async function runMcpServer(projectRoot: string): Promise<void> {
-  const store = new ReviewEventStore(projectRoot);
-  const claimStore = new AnnotationClaimStore(projectRoot);
+  const server = await createMcpServer(projectRoot);
+  await server.connect(new StdioServerTransport());
+}
+
+/**
+ * Create the MCP server for the project root plus every feedback root registered by a review proxy,
+ * so feedback is reachable regardless of the directory the MCP client was started in.
+ */
+export async function createMcpServer(
+  projectRoot: string,
+  registryPath: string = defaultFeedbackRootRegistry(),
+): Promise<McpServer> {
+  const workspace = new FeedbackWorkspace(projectRoot, registryPath);
   const agentId = agentSessionId(projectRoot);
   const server = new McpServer(
     { name: "ui-review", version: uiReviewVersion },
@@ -40,10 +51,10 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
         ...(pageUrl === undefined ? {} : { pageUrl }),
         ...(status === undefined ? {} : { status }),
       };
-      const annotations = await store.list(query);
-      const summaries = await Promise.all(annotations.map(async (annotation) => summarizeAnnotation(
+      const annotations = await workspace.list(query);
+      const summaries = await Promise.all(annotations.map(async ({ annotation, root }) => summarizeAnnotation(
         annotation,
-        presentClaim(await claimStore.get(annotation.id), agentId),
+        presentClaim(await root.claims.get(annotation.id), agentId),
       )));
       return toolResult({ annotations: summaries });
     },
@@ -57,12 +68,13 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       inputSchema: { annotationId: z.string().min(1) },
       title: "Get UI review annotation",
     },
-    async ({ annotationId }) => toolResult({
-      annotation: presentAnnotation(
-        await store.get(annotationId),
-        presentClaim(await claimStore.get(annotationId), agentId),
-      ),
-    }),
+    async ({ annotationId }) => {
+      const { annotation, root } = await workspace.locate(annotationId);
+      return toolResult({
+        annotation: presentAnnotation(annotation, presentClaim(await root.claims.get(annotationId), agentId)),
+        feedbackRoot: root.path,
+      });
+    },
   );
 
   server.registerTool(
@@ -77,8 +89,8 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       title: "Claim UI review annotation",
     },
     async ({ annotationId, leaseMinutes }) => {
-      await store.get(annotationId);
-      const claim = await claimStore.claim(annotationId, agentId, leaseMinutes * 60_000);
+      const { root } = await workspace.locate(annotationId);
+      const claim = await root.claims.claim(annotationId, agentId, leaseMinutes * 60_000);
       return toolResult({
         annotationId,
         claim: presentClaim(claim, agentId),
@@ -96,7 +108,7 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
     },
     async ({ annotationId }) => toolResult({
       annotationId,
-      released: await claimStore.release(annotationId, agentId),
+      released: await (await workspace.claimsFor(annotationId)).release(annotationId, agentId),
     }),
   );
 
@@ -112,10 +124,11 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       title: "Update UI review status",
     },
     async ({ annotationId, status }) => {
-      const annotation = await claimStore.runAsOwner(
+      const { root } = await workspace.locate(annotationId);
+      const annotation = await root.claims.runAsOwner(
         annotationId,
         agentId,
-        async () => store.setStatus(annotationId, status),
+        async () => root.store.setStatus(annotationId, status),
       );
       return toolResult({ annotationId: annotation.id, status: annotation.status });
     },
@@ -133,10 +146,11 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       title: "Reply to UI review annotation",
     },
     async ({ annotationId, message }) => {
-      const annotation = await claimStore.runAsOwner(
+      const { root } = await workspace.locate(annotationId);
+      const annotation = await root.claims.runAsOwner(
         annotationId,
         agentId,
-        async () => store.addMessage(annotationId, "agent", message),
+        async () => root.store.addMessage(annotationId, "agent", message),
       );
       return toolResult({ annotationId: annotation.id, replied: true, status: annotation.status });
     },
@@ -151,13 +165,14 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
       title: "Delete UI review annotation",
     },
     async ({ annotationId }) => {
-      await claimStore.runAsOwner(annotationId, agentId, async () => store.delete(annotationId));
-      await claimStore.release(annotationId, agentId);
+      const { root } = await workspace.locate(annotationId);
+      await root.claims.runAsOwner(annotationId, agentId, async () => root.store.delete(annotationId));
+      await root.claims.release(annotationId, agentId);
       return toolResult({ deleted: annotationId });
     },
   );
 
-  await server.connect(new StdioServerTransport());
+  return server;
 }
 
 function toolResult(value: unknown) {

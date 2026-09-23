@@ -25,6 +25,7 @@ Launch the current project for visual annotation without adding review code to t
 - Generate a cryptographically random review session UUID and start the proxy with `--port 0` so the operating system allocates a collision-free port.
 - Keep long-running commands in separate background tasks or process groups. Write output to `.ui-review/sessions/<session-id>.app.log` and `.ui-review/sessions/<session-id>.review.log`.
 - Record `.ui-review/sessions/<session-id>.json` atomically after startup with the session ID, project root, app identity, target URL or path, review URL, commands, process IDs, process groups, start time, and whether the app server was started by this invocation. Never overwrite another session record or `.ui-review/events.jsonl`.
+- The proxy registers its `--root` in `~/.ui-review/roots.json` on startup, so the user-scoped MCP server finds this session's feedback even when Claude Code runs in another directory. Do not edit that registry by hand.
 - Start a distinct session for this invocation. Attach to an existing session only when the user explicitly requests reuse, and never claim ownership of processes started by another session.
 - Wait until the target and review URL respond successfully before reporting completion. If startup fails, inspect the logs, stop only processes started during this invocation, and report the concrete error.
 

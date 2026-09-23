@@ -1,5 +1,5 @@
 # ui-review
 
-Local-first visual feedback for HTML and framework-based web applications. Run `ui-review <url-or-path>` to open an annotated review proxy, or `ui-review mcp --root .` to expose its feedback to an MCP-compatible coding agent. When Claude Code starts a user-scoped MCP server, UI Review automatically uses `CLAUDE_PROJECT_DIR` as the feedback root. Parallel agent windows coordinate through atomic, expiring annotation claims.
+Local-first visual feedback for HTML and framework-based web applications. Run `ui-review <url-or-path>` to open an annotated review proxy, or `ui-review mcp --root .` to expose its feedback to an MCP-compatible coding agent. When Claude Code starts a user-scoped MCP server, UI Review automatically uses `CLAUDE_PROJECT_DIR` as the feedback root. Each review proxy also registers its root in `~/.ui-review/roots.json`, and the MCP server serves annotations from every registered root, writing claims and replies back to the root that owns each annotation. Parallel agent windows coordinate through atomic, expiring annotation claims.
 
 See the repository README for the complete setup, SSH workflow, and Claude Code integration.

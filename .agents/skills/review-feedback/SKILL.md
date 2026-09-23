@@ -21,4 +21,6 @@ Never mark an item `resolved`; only the reviewer accepts the result. Never delet
 
 When several items overlap, implement them together but reply to and update every affected thread. If an annotation references an unavailable app or route, explain that in the thread and leave it `open`.
 
+The MCP tools cover every feedback root registered by a review proxy, not only the current project directory. `ui_review_get_annotation` returns the owning `feedbackRoot`; resolve screenshot `relativePath` values against it and locate the reviewed files there.
+
 Claims expire automatically. Release every owned claim when abandoning work or after an error; never release or take over another session's live claim.
