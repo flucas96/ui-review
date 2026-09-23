@@ -350,7 +350,9 @@ export const overlayStyles = `
   .ur-screenshot-tools { align-items: center; color: #a1a2aa; display: flex; font-size: 9px; gap: 8px; margin-top: 9px; }
   .ur-attach-button { align-items: center; background: #f0edff; border: 1px solid #dfd9ff; border-radius: 8px; color: #6252d7; cursor: pointer; display: inline-flex; font-size: 9px; font-weight: 750; gap: 6px; min-height: 32px; padding: 6px 9px; }
   .ur-attach-button svg { height: 13px; width: 13px; }
-  .ur-screenshot-preview { align-items: center; background: #f5f5f8; border: 1px solid #e5e5eb; border-radius: 10px; display: grid; gap: 8px; grid-template-columns: 54px minmax(0, 1fr) auto; margin-top: 9px; padding: 7px; }
+  .ur-attach-button:disabled { cursor: default; opacity: 0.55; }
+  .ur-screenshot-list { display: grid; gap: 8px; margin-top: 9px; }
+  .ur-screenshot-preview { align-items: center; background: #f5f5f8; border: 1px solid #e5e5eb; border-radius: 10px; display: grid; gap: 8px; grid-template-columns: 54px minmax(0, 1fr) auto; padding: 7px; }
   .ur-screenshot-preview img { background: #e7e7ed; border-radius: 7px; height: 42px; object-fit: cover; width: 54px; }
   .ur-screenshot-preview > span { color: #6f717c; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ur-composer-hint { color: #a1a2aa; font-size: 9px; margin: 7px 2px 0; }

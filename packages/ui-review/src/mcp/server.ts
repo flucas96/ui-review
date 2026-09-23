@@ -15,7 +15,6 @@ export async function runMcpServer(projectRoot: string): Promise<void> {
   const store = new ReviewEventStore(projectRoot);
   const claimStore = new AnnotationClaimStore(projectRoot);
   const agentId = agentSessionId(projectRoot);
-  await Promise.all([store.initialize(), claimStore.initialize()]);
   const server = new McpServer(
     { name: "ui-review", version: uiReviewVersion },
     {

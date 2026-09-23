@@ -27,8 +27,11 @@ type Point = {
 type PendingScreenshot = {
   readonly dimensions: { readonly height: number; readonly width: number };
   readonly file: File;
+  readonly id: string;
   readonly previewUrl: string;
 };
+
+const maxScreenshots = 5;
 
 type ReviewScope = "app" | "page";
 type StatusFilter = "active" | "all" | AnnotationStatus;
@@ -92,7 +95,8 @@ class ReviewOverlay {
   readonly #composerTextarea: HTMLTextAreaElement;
   readonly #composerSubmit: HTMLButtonElement;
   readonly #screenshotInput: HTMLInputElement;
-  readonly #screenshotPreview: HTMLDivElement;
+  readonly #screenshotChoose: HTMLButtonElement;
+  readonly #screenshotList: HTMLDivElement;
   readonly #preview: HTMLDivElement;
   readonly #previewMessage: HTMLParagraphElement;
   readonly #previewMeta: HTMLSpanElement;
@@ -109,7 +113,8 @@ class ReviewOverlay {
   #statusFilter: StatusFilter = "active";
   #agentFilter: AgentFilter = "all";
   #routeFilter = "*";
-  #pendingScreenshot: PendingScreenshot | null = null;
+  #pendingScreenshots: PendingScreenshot[] = [];
+  #screenshotSequence = 0;
   #refreshSequence = 0;
   #selectedId: string | null = null;
   readonly #selectedIds = new Set<string>();
@@ -165,7 +170,8 @@ class ReviewOverlay {
     this.#composerTextarea = required(this.#root, "[data-ur=composer-text]");
     this.#composerSubmit = required(this.#root, "[data-ur=composer-submit]");
     this.#screenshotInput = required(this.#root, "[data-ur=screenshot-input]");
-    this.#screenshotPreview = required(this.#root, "[data-ur=screenshot-preview]");
+    this.#screenshotChoose = required(this.#root, "[data-ur=screenshot-choose]");
+    this.#screenshotList = required(this.#root, "[data-ur=screenshot-list]");
     this.#preview = required(this.#root, "[data-ur=preview]");
     this.#previewMessage = required(this.#root, "[data-ur=preview-message]");
     this.#previewMeta = required(this.#root, "[data-ur=preview-meta]");
@@ -261,23 +267,21 @@ class ReviewOverlay {
       void this.#submitAnnotation();
     });
     this.#composerTextarea.addEventListener("paste", (event) => {
-      const screenshot = [...(event.clipboardData?.files ?? [])].find((file) => file.type.startsWith("image/"));
-      if (screenshot !== undefined) {
+      const images = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith("image/"));
+      if (images.length > 0) {
         event.preventDefault();
-        void this.#setPendingScreenshot(screenshot);
+        void this.#addPendingScreenshots(images);
       }
     });
     this.#screenshotInput.addEventListener("change", () => {
-      const screenshot = this.#screenshotInput.files?.[0];
-      if (screenshot !== undefined) {
-        void this.#setPendingScreenshot(screenshot);
+      const files = [...(this.#screenshotInput.files ?? [])];
+      this.#screenshotInput.value = "";
+      if (files.length > 0) {
+        void this.#addPendingScreenshots(files);
       }
     });
-    required<HTMLButtonElement>(this.#root, "[data-ur=screenshot-choose]").addEventListener("click", () => {
+    this.#screenshotChoose.addEventListener("click", () => {
       this.#screenshotInput.click();
-    });
-    required<HTMLButtonElement>(this.#root, "[data-ur=screenshot-remove]").addEventListener("click", () => {
-      this.#clearPendingScreenshot();
     });
 
     document.addEventListener("pointermove", this.#onDocumentPointerMove, true);
@@ -520,7 +524,7 @@ class ReviewOverlay {
     this.#composerTarget.textContent = targetLabel(target);
     this.#composerTextarea.value = "";
     this.#composerSubmit.disabled = true;
-    this.#clearPendingScreenshot();
+    this.#clearPendingScreenshots();
     this.#makeTargetPageInert();
     this.#modal.hidden = false;
     this.#render();
@@ -531,7 +535,7 @@ class ReviewOverlay {
     const captureMode = this.#interaction.kind === "composing" ? this.#interaction.mode : null;
     this.#modal.hidden = true;
     this.#composerTextarea.value = "";
-    this.#clearPendingScreenshot();
+    this.#clearPendingScreenshots();
     this.#restoreTargetPage();
     const returnFocus = this.#returnFocus;
     this.#returnFocus = null;
@@ -549,7 +553,18 @@ class ReviewOverlay {
     });
   }
 
-  async #setPendingScreenshot(file: File): Promise<void> {
+  async #addPendingScreenshots(files: readonly File[]): Promise<void> {
+    for (const file of files) {
+      if (this.#pendingScreenshots.length >= maxScreenshots) {
+        this.#showToast(`Attach up to ${String(maxScreenshots)} screenshots`, "error");
+        break;
+      }
+      await this.#addPendingScreenshot(file);
+    }
+    this.#renderScreenshotPreviews();
+  }
+
+  async #addPendingScreenshot(file: File): Promise<void> {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       this.#showToast("Use a PNG, JPEG, or WebP screenshot", "error");
       return;
@@ -561,37 +576,59 @@ class ReviewOverlay {
     const previewUrl = URL.createObjectURL(file);
     try {
       const dimensions = await imageDimensions(previewUrl);
-      this.#clearPendingScreenshot();
-      this.#pendingScreenshot = { dimensions, file, previewUrl };
-      const image = required<HTMLImageElement>(this.#screenshotPreview, "[data-ur=screenshot-image]");
-      const name = required<HTMLElement>(this.#screenshotPreview, "[data-ur=screenshot-name]");
-      image.src = previewUrl;
-      image.alt = `Attached screenshot: ${file.name}`;
-      name.textContent = `${file.name} · ${String(dimensions.width)}×${String(dimensions.height)}`;
-      this.#screenshotPreview.hidden = false;
+      this.#pendingScreenshots.push({ dimensions, file, id: `s${String(++this.#screenshotSequence)}`, previewUrl });
     } catch {
       URL.revokeObjectURL(previewUrl);
       this.#showToast("The screenshot could not be read", "error");
-    } finally {
-      this.#screenshotInput.value = "";
     }
   }
 
-  #clearPendingScreenshot(): void {
-    if (this.#pendingScreenshot !== null) {
-      URL.revokeObjectURL(this.#pendingScreenshot.previewUrl);
+  #removePendingScreenshot(id: string): void {
+    const pending = this.#pendingScreenshots.find((screenshot) => screenshot.id === id);
+    if (pending === undefined) {
+      return;
     }
-    this.#pendingScreenshot = null;
-    this.#screenshotPreview.hidden = true;
-    const image = this.#screenshotPreview.querySelector<HTMLImageElement>("[data-ur=screenshot-image]");
-    if (image !== null) {
-      image.removeAttribute("src");
-      image.alt = "";
+    URL.revokeObjectURL(pending.previewUrl);
+    this.#pendingScreenshots = this.#pendingScreenshots.filter((screenshot) => screenshot.id !== id);
+    this.#renderScreenshotPreviews();
+  }
+
+  #clearPendingScreenshots(): void {
+    for (const pending of this.#pendingScreenshots) {
+      URL.revokeObjectURL(pending.previewUrl);
     }
-    const name = this.#screenshotPreview.querySelector<HTMLElement>("[data-ur=screenshot-name]");
-    if (name !== null) {
-      name.textContent = "";
+    this.#pendingScreenshots = [];
+    this.#renderScreenshotPreviews();
+  }
+
+  #renderScreenshotPreviews(): void {
+    this.#screenshotList.replaceChildren();
+    for (const pending of this.#pendingScreenshots) {
+      const row = element("div", "ur-screenshot-preview");
+      const image = document.createElement("img");
+      image.src = pending.previewUrl;
+      image.alt = `Attached screenshot: ${pending.file.name}`;
+      const name = element(
+        "span",
+        "",
+        `${pending.file.name} · ${String(pending.dimensions.width)}×${String(pending.dimensions.height)}`,
+      );
+      const remove = document.createElement("button");
+      remove.className = "ur-icon-button";
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove screenshot ${pending.file.name}`);
+      remove.append(iconElement(icons.close));
+      remove.addEventListener("click", () => this.#removePendingScreenshot(pending.id));
+      row.append(image, name, remove);
+      this.#screenshotList.append(row);
     }
+    this.#screenshotList.hidden = this.#pendingScreenshots.length === 0;
+    const atCap = this.#pendingScreenshots.length >= maxScreenshots;
+    this.#screenshotChoose.disabled = atCap;
+    const label = required<HTMLElement>(this.#screenshotChoose, "[data-ur=screenshot-choose-label]");
+    label.textContent = this.#pendingScreenshots.length === 0
+      ? "Attach screenshot"
+      : `Attach screenshot (${String(this.#pendingScreenshots.length)}/${String(maxScreenshots)})`;
   }
 
   #makeTargetPageInert(): void {
@@ -651,18 +688,18 @@ class ReviewOverlay {
       return;
     }
     const composing = this.#interaction;
-    const pendingScreenshot = this.#pendingScreenshot;
+    const pendingScreenshots = this.#pendingScreenshots;
     this.#composerSubmit.disabled = true;
     try {
-      const screenshot = pendingScreenshot === null
-        ? undefined
-        : await this.#api.uploadScreenshot(pendingScreenshot.file, pendingScreenshot.dimensions);
+      const screenshots = await Promise.all(
+        pendingScreenshots.map((pending) => this.#api.uploadScreenshot(pending.file, pending.dimensions)),
+      );
       const annotation = await this.#api.create({
         appId: this.#appId,
         comment,
         pageTitle: document.title,
         pageUrl: this.#currentPage,
-        ...(screenshot === undefined ? {} : { screenshots: [screenshot] }),
+        ...(screenshots.length === 0 ? {} : { screenshots }),
         target: composing.target,
       });
       this.#closeComposer(true);
@@ -1509,16 +1546,12 @@ function markup(nonce: string): string {
         <div class="ur-composer-body">
           <textarea data-ur="composer-text" aria-label="Feedback comment" placeholder="What should change, and what result do you want?" maxlength="20000" required></textarea>
           <div class="ur-screenshot-tools">
-            <input data-ur="screenshot-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-            <button class="ur-attach-button" data-ur="screenshot-choose" type="button">${icons.camera}<span>Attach screenshot</span></button>
+            <input data-ur="screenshot-input" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+            <button class="ur-attach-button" data-ur="screenshot-choose" type="button">${icons.camera}<span data-ur="screenshot-choose-label">Attach screenshot</span></button>
             <span>or paste an image</span>
           </div>
-          <div class="ur-screenshot-preview" data-ur="screenshot-preview" hidden>
-            <img data-ur="screenshot-image" alt="">
-            <span data-ur="screenshot-name"></span>
-            <button class="ur-icon-button" data-ur="screenshot-remove" type="button" aria-label="Remove screenshot">${icons.close}</button>
-          </div>
-          <p class="ur-composer-hint" id="ur-composer-hint">The target, styles, position, page context, and optional screenshot are attached automatically.</p>
+          <div class="ur-screenshot-list" data-ur="screenshot-list" hidden></div>
+          <p class="ur-composer-hint" id="ur-composer-hint">The target, styles, position, page context, and optional screenshots are attached automatically.</p>
         </div>
         <footer class="ur-composer-actions"><button class="ur-button ur-button-secondary" data-ur="composer-cancel" type="button">${icons.close}<span>Cancel</span></button><button class="ur-button ur-button-primary" data-ur="composer-submit" type="submit" disabled>${icons.check}<span>Add comment</span></button></footer>
       </form>
