@@ -4,6 +4,7 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runMcpServer } from "./mcp/server.js";
+import { defaultFeedbackRootRegistry } from "./server/feedback-roots.js";
 import { startReviewServer } from "./server/review-server.js";
 import { uiReviewVersion } from "./shared/version.js";
 
@@ -63,6 +64,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   const runningServer = await startReviewServer({
     ...(parsed.appId === undefined ? {} : { appId: parsed.appId }),
     basePath: parsed.basePath,
+    feedbackRootRegistry: defaultFeedbackRootRegistry(),
     host: parsed.host,
     includeHash: parsed.includeHash,
     port: parsed.port,

@@ -7,12 +7,15 @@ import { fileURLToPath } from "node:url";
 import { ReviewApi } from "./api.js";
 import { ScreenshotAttachmentStore } from "./attachment-store.js";
 import { ReviewEventStore } from "./event-store.js";
+import { registerFeedbackRoot } from "./feedback-roots.js";
 import { resolveStaticTarget, serveStaticTarget, type StaticTarget } from "./static-target.js";
 import { UpstreamProxy } from "./upstream-proxy.js";
 
 export type ReviewServerOptions = {
   readonly appId?: string;
   readonly basePath?: string;
+  /** User-level registry that records this feedback root so MCP servers started elsewhere find it. */
+  readonly feedbackRootRegistry?: string;
   readonly host?: string;
   readonly includeHash?: boolean;
   readonly port?: number;
@@ -43,7 +46,13 @@ export async function startReviewServer(options: ReviewServerOptions): Promise<R
   const browserBundle = await readFile(findBrowserBundle());
   const store = new ReviewEventStore(options.projectRoot);
   const attachments = new ScreenshotAttachmentStore(options.projectRoot);
-  await Promise.all([store.initialize(), attachments.initialize()]);
+  await Promise.all([
+    store.initialize(),
+    attachments.initialize(),
+    ...(options.feedbackRootRegistry === undefined
+      ? []
+      : [registerFeedbackRoot(options.projectRoot, options.feedbackRootRegistry)]),
+  ]);
   const basePath = options.basePath ?? "";
   const api = new ReviewApi(store, attachments, browserBundle, basePath);
   const appId = options.appId ?? defaultAppId(options.target);
